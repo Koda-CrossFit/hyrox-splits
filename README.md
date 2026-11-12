@@ -1,0 +1,52 @@
+# Koda Split Analyzer for HYROX races
+
+A free, public page for potential HYROX clients of Koda CrossFit Iron View. A racer enters their splits (in the same order the HYROX results apps show them: Run 1, Ski, Run 2, Sled Push … Run 8, Wall Balls, Roxzone, Overall) and gets a race report:
+
+- **Time on the table**: how much faster they'd have been if every split where they're slower than typical were simply typical for their finish time.
+- **Biggest time-savers**: their top 3 gaps in seconds (10 s or more), each with a coaching tip (singles or doubles version), its rating and where they sit among racers who finished in the same time.
+- **Strengths & weak spots**: every segment vs typical for their finish time (diverging bars, sortable by gap or race order).
+- **Running, km by km**: their 8 runs vs the typical pattern, with pace, fade and toughest-km notes.
+- **Path to a goal**: where the time to a goal usually comes from. The default goal is the next 5-minute mark when that's within a strong next race for their level, otherwise a strong next race to the nearest minute.
+- Their finish level in the division ("Top 5% of Mixed Doubles teams"), a "train it at Koda" call to action, copy-link sharing and print/PDF.
+
+Divisions: Men's and Women's Open and Pro (singles); Men's, Women's and Mixed Doubles; Men's and Women's Pro Doubles.
+
+Splits can be typed, pasted as text, or read from **screenshots** (the results app or results website). Screenshots are read on the device with Tesseract.js, so nothing is uploaded. Nothing the visitor enters leaves the browser.
+
+## Files
+
+| File | What it is |
+|---|---|
+| `index.html` | Page markup and all styles (Koda HYROX look: charcoal, sand, electric yellow), method and sources text |
+| `app.js` | Everything that runs: time parsing, the comparison model, screenshot/paste reading, the report |
+| `benchmarks.js` | **Generated.** Typical splits, run-lap shapes, within-peer spreads and finish distributions for each division |
+| `assets/` | Koda mark, link-preview image (`og-splits.jpg`) |
+| `tools/build-benchmarks.js` | Builds `benchmarks.js` from `research/` |
+| `tools/serve.js` | Local preview server: `node tools/serve.js` → http://localhost:8795 |
+| `tools/og_image.js` | Re-renders `assets/og-splits.jpg` (numbers match the Men's Open sample report) |
+| `tools/snap.js`, `tools/snap-parts.js` | Full-page / per-section screenshots of the local preview |
+| `tools/test/` | **Not published** (in `.gitignore`). Mock-ups of results-app and results-site screenshots for testing the screenshot reader |
+| `research/` | **Not published** (in `.gitignore`). The research syntheses, fact-checks, per-anchor laps and spread tables the benchmarks are built from, plus `roxpace_benchmarks.json` (rox-pace, MIT licence) |
+
+## How the analysis works
+
+1. **Typical splits.** For each division, `benchmarks.js` holds anchor rows every 5–15 minutes of finish time: the typical time for running (all 8 km), Roxzone and each station. Each row adds up exactly to its finish time. Singles rows are 2025/26 same-finish cohort medians (closed so they sum to the finish); doubles rows are team cohort means calibrated to RoxTimes medians.
+2. **Your peers.** Peers are matched on what your splits add up to with a typical Run 1 (Tp), because the start lap is shorter or longer at many venues. Every typical split is interpolated linearly between the two nearest anchors; above the table each part keeps its own end slope, below it everything scales in proportion. Nothing changes in steps at 60 or 90 minutes; the brackets are labels only. More than 5 minutes beyond either end of a division's table, splits are shown in seconds but not rated.
+3. **Seconds.** Each segment's difference = your time − typical time. Running is compared on **Runs 2–8** (Run 1 is shown, never rated). The differences net to zero. "Time on the table" is the sum of the positive differences; the time-savers are the biggest of them (10 s or more), ranked by seconds. Pacing notes only fire beyond normal lap-to-lap variation (fade beyond about one peer spread; a single slow lap beyond about two).
+4. **Ratings and percentiles.** Each split is placed among same-finish peers with a two-piece log-normal: `z = ln(you / peer median) / spread`, using the measured spread below or above the median. Peer medians sit slightly faster than the summed profile (`delta`). Sled push, sled pull and Roxzone spreads are widened 25% for venue differences; spreads have floors. Ratings: z ≥ 1.28 big opportunity, ≥ 0.67 time to gain, middle half normal range, ≤ −0.67 strength, ≤ −1.28 big strength. The "faster/slower than X%" text only shows when it agrees with the seconds next to it. Doubles borrow the matching singles spreads at the same place in their field, and say so.
+5. **Goal plan.** For goal G, take the typical splits at G. Any segment where you're already faster keeps your time; every other segment's target is λ × the typical split at G, with λ chosen (by bisection, always bracketed) so the targets add up to G. Running here is all 8 km. A penalty (official time 15 s to 15 min above the splits; more is treated as a typo) is its own row; timing rounding and a venue's long or short first lap are carried as offsets, so they are never "time to cut". With a penalty, the suggested goal starts from the clean time (the splits). Goals are typed as h:mm:ss, and a short entry like 1:15 means 1:15:00.
+6. **Finish level.** Your finish is placed on the division's finish-time distribution (interpolated in log-time / normal-quantile space): 2025/26 singles percentiles up to the median, rox-pace above it and for doubles.
+
+## Updating the benchmarks
+
+1. Update the tables in `research/` (new season, new data).
+2. `node tools/build-benchmarks.js` → rewrites `benchmarks.js` (checks that every row sums to its finish and every segment rises with finish time).
+3. Bump the `?v=` on the two script tags in `index.html` so returning visitors get the new files.
+
+## Tools
+
+The screenshot and image scripts need Puppeteer: `npm i puppeteer` here, or point `PUPPETEER_MODULE` at an existing install.
+
+## Deploying
+
+GitHub Pages serves `main`; a push goes live in about a minute.
