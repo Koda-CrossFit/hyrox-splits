@@ -434,13 +434,15 @@
     });
     return { v, bad };
   }
-  function setValue(id, sec, auto) {
+  // src says where a value came from: 'sample', 'link' (a report link), 'import' (screenshot or
+  // paste) or nothing (typed). A new import clears sample and link values so they can't mix in.
+  function setValue(id, sec, auto, src) {
     const el = inputOf(id);
     if (!el) return;
     el.value = sec == null ? '' : fmt(sec);
     el.classList.toggle('auto', !!auto && sec != null);
     el.classList.remove('bad');
-    delete el.dataset.sample;                // only fillExample marks values as the sample's
+    if (src && sec != null) el.dataset.src = src; else delete el.dataset.src;
     $('#m-' + id).textContent = '';
   }
 
@@ -540,7 +542,10 @@
   // ───────────────────────── Import: paste, screenshots, example ─────────────────────────
   const LABEL_DEFS = [
     ['avg', /\b(?:avg|average)\.?\s*(?:run|pace|lap)\b/gi],
-    ['run', /\bru[nm]{1,2}(?:ing)?\s*#?\s*([1-8lI|])(?![\d:])/gi],
+    // Run 1-8. The reader often turns the number into a look-alike letter (Run 5 → "Runs",
+    // Run 8 → "Rung"); a letter only counts as a number when a run-length time (under 20 min)
+    // follows it on the same line, so a "Runs 49:39" total is never taken for Run 5.
+    ['run', /\bru[nm]{1,2}(?:ing)?\s*#?\s*(?:([1-8lI|])(?![\d:])|([sSzZbBgG&])(?=\s+1?\d[:.]\d{2}(?![\d:])))/gi],
     ['runtotal', /\brun(?:ning)?\s*total\b|\btotal\s*run(?:ning)?\b|\brunning\b(?!\s*#?\s*[1-8lI|](?![\d:]))/gi],
     ['functional', /\bfunctional\b|\bwork\s*total\b|\bstations?\s*total\b|\btotal\s*work\b/gi],
     ['ski', /\bski\s*-?\s*erg\b|\bski\b/gi],
@@ -557,9 +562,13 @@
   const IGNORE = { avg: 1, runtotal: 1, functional: 1 };
 
   function normLine(line) {
-    // Fix common OCR slips inside time-like tokens (O→0, l/I/|→1).
-    return line.replace(/[\dOoIl|]{1,2}[:.][\dOoIl|]{2}(?:[:.][\dOoIl|]{2})?/g, tok => tok.replace(/[Oo]/g, '0').replace(/[Il|]/g, '1'));
+    // Fix common OCR slips inside time-like tokens that aren't glued to a word:
+    // O→0, l/I/|→1, S→5, B→8, Z→2 (only in tokens that already contain a real digit).
+    return line.replace(/(^|[^A-Za-z])([\dOoIl|SsBZz]{1,2}[:.][\dOoIl|SsBZz]{2}(?:[:.][\dOoIl|SsBZz]{2})?)(?![A-Za-z])/g, (all, pre, tok) =>
+      /\d/.test(tok) ? pre + tok.replace(/[Oo]/g, '0').replace(/[Il|]/g, '1').replace(/[Ss]/g, '5').replace(/B/g, '8').replace(/[Zz]/g, '2') : all);
   }
+  // Look-alike characters the reader puts in place of a run number.
+  const RUN_LOOKALIKE = { l: '1', L: '1', I: '1', i: '1', '|': '1', z: '2', Z: '2', s: '5', S: '5', b: '6', G: '6', B: '8', g: '8', '&': '8' };
   function findLabels(line) {
     const hits = [];
     LABEL_DEFS.forEach(([id, re]) => {
@@ -567,7 +576,7 @@
       let m;
       while ((m = re.exec(line))) {
         let key = id;
-        if (id === 'run') key = 'run' + String(m[1]).replace(/[lI|]/, '1');
+        if (id === 'run') { const c = m[1] || m[2]; key = 'run' + (/[1-8]/.test(c) ? c : RUN_LOOKALIKE[c]); }
         hits.push({ key, idx: m.index, end: m.index + m[0].length, len: m[0].length });
         if (m[0].length === 0) re.lastIndex++;
       }
@@ -624,19 +633,31 @@
 
   function applyParsed(parsed, sourceText) {
     const keys = Object.keys(parsed.got).filter(k => ALL_IDS.includes(k));
-    keys.forEach(k => setValue(k, parsed.got[k], true));
-    ALL_IDS.forEach(id => { if (inputOf(id).value) validateField(id, false); });
-    refreshTotals();
-    const need = ORDER.filter(id => parsed.got[id] == null && parseTime(inputOf(id).value) == null);
-    const hasEnd = parseTime(inputOf('rox').value) != null || parseTime(inputOf('overall').value) != null;
     const n = keys.length;
     if (!n) {
       showStatus('err', 'We couldn\'t find any splits in ' + sourceText + '. Make sure the split names and times are visible, or type them in below.');
       return;
     }
+    // Start from a clean slate for this race: drop sample and report-link values, and earlier
+    // screenshot values too when this import shows a different race (same split, new time).
+    // Times you typed stay. A second screenshot of the same race only adds to the first.
+    const newRace = keys.some(k => { const el = inputOf(k), cur = parseTime(el.value); return el.dataset.src === 'import' && cur != null && !isNaN(cur) && Math.abs(cur - parsed.got[k]) > 1; });
+    ALL_IDS.forEach(id => { const s = inputOf(id).dataset.src; if (s === 'sample' || s === 'link' || (newRace && s === 'import')) setValue(id, null); });
+    keys.forEach(k => setValue(k, parsed.got[k], true, 'import'));
+    ALL_IDS.forEach(id => { if (inputOf(id).value) validateField(id, false); });
+    // A report already on screen was for other numbers; take it down until Analyze is pressed.
+    if (!$('#report').hidden) {
+      $('#report').hidden = true;
+      lastRes = null;
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
+    }
+    refreshTotals();
+    const need = ORDER.filter(id => parseTime(inputOf(id).value) == null);
+    const hasEnd = parseTime(inputOf('rox').value) != null || parseTime(inputOf('overall').value) != null;
     const missing = need.map(id => FIELD[id].label).concat(hasEnd ? [] : ['Roxzone or Overall']);
     const nTxt = n + (n === 1 ? ' time' : ' times');
     if (!missing.length) showStatus('ok', 'Read <b>' + nTxt + '</b> from ' + esc(sourceText) + '. Give them a quick check (filled fields are marked in yellow), then hit Analyze.');
+    else if (!need.length) showStatus('warn', 'Read <b>' + nTxt + '</b> from ' + esc(sourceText) + ': all 16 splits are in. Now add your <b>Overall</b> time (or Roxzone) below and we\'ll work out the other.');
     else showStatus('warn', 'Read <b>' + nTxt + '</b> from ' + esc(sourceText) + '. Still missing: <b>' + esc(missing.join(', ')) + '</b>. Add another screenshot or type them in.');
     const conflicts = Array.from(new Set(parsed.conflicts));
     if (conflicts.length) {
@@ -760,10 +781,10 @@
   // Fill a sample race for the division you picked (Men's Open by default, as on the hero card).
   // Any splits of your own (typed, pasted, read from a screenshot or a link) are only replaced on a yes.
   function fillExample() {
-    const own = ALL_IDS.some(id => { const el = inputOf(id); return el.value.trim() && el.dataset.sample !== '1'; });
+    const own = ALL_IDS.some(id => { const el = inputOf(id); return el.value.trim() && el.dataset.src !== 'sample'; });
     if (own && !window.confirm('Replace your splits with a sample race?')) return false;
     const v = exampleFor(currentCat());
-    ALL_IDS.forEach(id => { setValue(id, v[id], true); inputOf(id).dataset.sample = '1'; });
+    ALL_IDS.forEach(id => setValue(id, v[id], true, 'sample'));
     showStatus('ok', 'Filled in a <b>sample race</b> for ' + esc(B.categories[currentCat()].label) + '. Swap in your own splits any time.');
     refreshTotals();
     return true;
@@ -856,7 +877,7 @@
       return false;
     }
     setCat(CODE_CATS[code]);
-    ALL_IDS.forEach((id, i) => setValue(id, parts[i] === '' ? null : +parts[i], true));
+    ALL_IDS.forEach((id, i) => setValue(id, parts[i] === '' ? null : +parts[i], true, 'link'));
     $('#t-goal').value = m[3] ? fmt(+m[3]) : '';
     refreshTotals();
     return true;
@@ -1314,7 +1335,7 @@
     grid.addEventListener('input', e => {
       if (!e.target.classList.contains('tin')) return;
       e.target.classList.remove('auto');
-      delete e.target.dataset.sample;
+      delete e.target.dataset.src;          // typed now: yours
       if (e.target.classList.contains('bad')) validateField(e.target.dataset.id, false);
       refreshTotals();
     });
