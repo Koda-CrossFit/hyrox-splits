@@ -9,6 +9,7 @@
   const B = window.KODA_BENCH;
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+  const motion = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');   // scroll behaviour
 
   // ───────────────────────── Segments ─────────────────────────
   // Race order, exactly as the results apps list them.
@@ -72,7 +73,7 @@
 
   const CAT_CODES = { 'men-open': 'mo', 'women-open': 'wo', 'men-pro': 'mp', 'women-pro': 'wp', 'dbl-men': 'dm', 'dbl-women': 'dw', 'dbl-mixed': 'dx', 'dbl-pro-men': 'dpm', 'dbl-pro-women': 'dpw' };
   const CODE_CATS = Object.fromEntries(Object.entries(CAT_CODES).map(([k, v]) => [v, k]));
-  const DBL_SPREAD = ' Typical splits come from doubles teams; how unusual each split is (the % figures) is estimated from singles racers, because team-to-team spreads aren\'t published.';
+  const DBL_SPREAD = ' Typical splits come from doubles teams; how unusual each split is (its rating) is estimated from singles racers, because team-to-team spreads aren\'t published.';
   const PRO_NOTE = 'Pro races heavier sleds, sandbag, kettlebells and wall ball, so your splits are compared with other Pro athletes.';
   const CAT_NOTES = {
     'men-open': '',
@@ -146,7 +147,7 @@
   // ───────────────────────── Benchmark model ─────────────────────────
   // Typical splits come from anchor rows (benchmarks.js): for each division, the typical time on
   // every part of the race for athletes (or teams) finishing at that time. Everything slides
-  // continuously with the exact finish time; the <60 / 60-90 / 90+ brackets are labels only.
+  // continuously with the exact finish time (no steps at 60 or 90 minutes).
   const KEYS = B.cols.slice(1); // run, rox, ski, ...
   Object.entries(B.categories).forEach(([key, cat]) => {
     cat.key = key;
@@ -278,7 +279,6 @@
     return { id: 'strong', text: 'Big strength' };                  // faster than ~90%
   }
   const NOT_RATED = { id: 'none', text: 'Not rated' };
-  function bracketOf(sec) { const m = sec / 60; return m < 60 ? 'Under 60 min' : m < 90 ? '60–90 min' : '90+ min'; }
 
   // ───────────────────────── Analysis ─────────────────────────
   function analyze(catKey, v, goalSec) {
@@ -408,8 +408,8 @@
 
   function fieldHTML(id) {
     const f = FIELD[id];
-    const ph = id === 'overall' ? '1:15:00' : id === 'rox' ? '6:30' : f.kind === 'run' ? '4:45' : '4:30';
-    return '<label class="sf" for="t-' + id + '"><span class="sl">' + esc(f.label) + ' <small>' + esc(f.spec) + '</small></span>' +
+    const ph = id === 'overall' ? 'h:mm:ss' : 'm:ss';   // a format hint, never a time that could pass for yours
+    return '<label class="sf" for="t-' + id + '"><span class="sl"><b>' + esc(f.label) + '</b> <small>' + esc(f.spec) + '</small></span>' +
       '<input class="tin" id="t-' + id + '" data-id="' + id + '" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="' + ph + '" aria-describedby="m-' + id + '">' +
       '<span class="fmsg" id="m-' + id + '"></span></label>';
   }
@@ -503,12 +503,16 @@
   // Rebuild the Quick picks only when the options change, so a click that blurs a field (which
   // refreshes the totals) still lands on its button.
   function refreshGoalPresets(official) {
-    const box = $('#goalPresets');
-    if (!official) {
-      if (box.dataset.key !== 'none') { box.dataset.key = 'none'; box.innerHTML = '<span class="hint">Enter your splits to see suggestions.</span>'; }
+    const box = $('#goalPresets'), cat = currentCat();
+    if (!official || !cat) {
+      const k = cat ? 'none' : 'nocat';
+      if (box.dataset.key !== k) {
+        box.dataset.key = k;
+        box.innerHTML = '<span class="hint">' + (cat ? 'Enter your splits to see suggestions.' : 'Pick your division to see suggestions.') + '</span>';
+      }
       return;
     }
-    const opts = goalOptions(currentCat(), official), key = opts.join(',');
+    const opts = goalOptions(cat, official), key = cat + ':' + opts.join(',');
     if (box.dataset.key !== key) {
       box.dataset.key = key;
       box.innerHTML = opts.map(g => '<button type="button" data-g="' + g + '">Sub ' + fmt(g) + '</button>').join('');
@@ -531,12 +535,54 @@
     return m || g === null || isNaN(g) ? null : g;
   }
 
-  function currentCat() { const r = $('input[name="cat"]:checked'); return r ? r.value : 'men-open'; }
+  // Division: Singles or Doubles first, then the division. Each type remembers its last pick; Doubles
+  // starts with none, so a team is never analysed in a division it didn't choose.
+  const kindOf = key => (/^dbl-/.test(key) ? 'doubles' : 'singles');
+  const lastCat = { singles: 'men-open', doubles: null };
+  function currentCat() { const r = $('input[name="cat"]:checked'); return r ? r.value : null; }
+  function currentKind() { const r = $('input[name="kind"]:checked'); return r ? r.value : 'singles'; }
+  function showKind(kind) {
+    $$('input[name="kind"]').forEach(r => { r.checked = r.value === kind; });
+    $$('.cat-pick').forEach(p => { p.hidden = p.dataset.kind !== kind; });
+  }
   function setCat(key) {
     const r = $('input[name="cat"][value="' + key + '"]');
-    if (r) r.checked = true;
+    if (!r) return;
+    r.checked = true;
     state.cat = key;
+    lastCat[kindOf(key)] = key;
+    showKind(kindOf(key));
     $('#catNote').textContent = CAT_NOTES[key] || '';
+    $('#catNote').classList.remove('ask');
+  }
+  // A division picked on the page: refresh the Quick picks, and re-run a visible report. If the splits
+  // no longer pass the checks, take the old report down rather than leave another division's numbers up.
+  function chooseCat(key) {
+    const was = state.cat;
+    setCat(key);
+    const fe = $('#formError');
+    if (fe.dataset.err === 'cat') { fe.classList.remove('show'); delete fe.dataset.err; }   // the "pick a division" ask is answered
+    // "Try an example" was pressed before a division was picked: fill it in now, as promised.
+    if (state.pendingExample) { state.pendingExample = false; if (!fillExample()) hideStatus('ask-cat'); }
+    else hideStatus('ask-cat');
+    refreshTotals();
+    if (key === was || !lastRes || $('#report').hidden) return;
+    if (!runAnalysis({ noScroll: true, silent: true })) {
+      $('#report').hidden = true;
+      lastRes = null;
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
+      $('#formError').scrollIntoView({ behavior: motion(), block: 'center' });
+    }
+  }
+  function chooseKind(kind) {
+    showKind(kind);
+    if (lastCat[kind]) { chooseCat(lastCat[kind]); return; }
+    // No division of this type picked yet: ask for one. A report on screen stays until one is picked.
+    $$('input[name="cat"]').forEach(r => { r.checked = false; });
+    state.cat = null;
+    $('#catNote').textContent = 'Pick your ' + kind + ' division: ' + (kind === 'doubles' ? 'Men, Women, Mixed, Men Pro or Women Pro.' : 'Men Open, Women Open, Men Pro or Women Pro.');
+    $('#catNote').classList.add('ask');
+    refreshTotals();
   }
 
   // ───────────────────────── Import: paste, screenshots, example ─────────────────────────
@@ -665,12 +711,15 @@
     }
   }
 
-  function showStatus(kind, html, progress) {
+  // tag marks a message that something else may later take down (see hideStatus).
+  function showStatus(kind, html, progress, tag) {
     const st = $('#importStatus');
     st.hidden = false;
+    st.dataset.tag = tag || '';
     st.className = 'import-status' + (kind === 'busy' ? ' busy' : kind === 'warn' ? ' warn' : kind === 'err' ? ' err' : '');
     st.innerHTML = '<span class="dot"></span><div>' + html + (progress != null ? '<div class="bar"><i style="width:' + Math.round(progress * 100) + '%"></i></div>' : '') + '</div>';
   }
+  function hideStatus(tag) { const st = $('#importStatus'); if (!st.hidden && st.dataset.tag === tag) st.hidden = true; }
   function setProgress(p) { const i = $('#importStatus .bar i'); if (i) i.style.width = Math.round(p * 100) + '%'; }
 
   const OCR_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
@@ -778,14 +827,21 @@
     v.overall = sum(ORDER.map(id => v[id])) + v.rox;
     return v;
   }
-  // Fill a sample race for the division you picked (Men's Open by default, as on the hero card).
+  // Fill a sample race for the division you picked (Men's Open by default).
   // Any splits of your own (typed, pasted, read from a screenshot or a link) are only replaced on a yes.
   function fillExample() {
+    const cat = currentCat();
+    if (!cat) {
+      state.pendingExample = true;
+      showStatus('warn', 'Pick your ' + currentKind() + ' division above and we\'ll fill in a sample race for it.', null, 'ask-cat');
+      return false;
+    }
+    state.pendingExample = false;
     const own = ALL_IDS.some(id => { const el = inputOf(id); return el.value.trim() && el.dataset.src !== 'sample'; });
     if (own && !window.confirm('Replace your splits with a sample race?')) return false;
-    const v = exampleFor(currentCat());
+    const v = exampleFor(cat);
     ALL_IDS.forEach(id => setValue(id, v[id], true, 'sample'));
-    showStatus('ok', 'Filled in a <b>sample race</b> for ' + esc(B.categories[currentCat()].label) + '. Swap in your own splits any time.');
+    showStatus('ok', 'Filled in a <b>sample race</b> for ' + esc(B.categories[cat].label) + '. Swap in your own splits any time.');
     refreshTotals();
     return true;
   }
@@ -820,8 +876,21 @@
 
   function runAnalysis(opts) {
     opts = opts || {};
-    const { v, errors, firstBad } = collect(true);
     const fe = $('#formError');
+    const cat = currentCat();
+    if (!cat) {
+      fe.textContent = 'Pick your ' + currentKind() + ' division at the top of the form.';
+      fe.dataset.err = 'cat';
+      fe.classList.add('show');
+      const first = $('.cat-pick:not([hidden]) input');
+      if (first && !opts.silent) {
+        first.focus({ preventScroll: true });
+        first.closest('.card').scrollIntoView({ behavior: motion(), block: 'start' });
+      }
+      return false;
+    }
+    delete fe.dataset.err;                  // any message from here on is about the splits
+    const { v, errors, firstBad } = collect(true);
     if (errors.length) {
       const missing = ORDER.filter(id => parseTime(inputOf(id).value) === null).length;
       let msg = 'Please fix the highlighted times.';
@@ -841,14 +910,19 @@
     checkGoal(official); // field message for a goal we can't use; analyze() then picks one and says so
     const gText = $('#t-goal').value.trim();
     const gRaw = parseGoal(gText);
-    const res = analyze(currentCat(), v, gRaw == null ? null : gRaw);   // NaN = typed but unreadable
+    const res = analyze(cat, v, gRaw == null ? null : gRaw);   // NaN = typed but unreadable
     res.goalText = gText;
-    // Show the report before drawing it, so the run chart is measured at its real width.
     const rep = $('#report');
     rep.hidden = false;
     renderReport(res);
     writeHash(res);
-    if (!opts.noScroll) setTimeout(() => rep.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }), 30);
+    if (!opts.noScroll) {
+      setTimeout(() => {
+        rep.scrollIntoView({ behavior: motion(), block: 'start' });
+        // Pressing Analyze takes you (and a screen reader) to the report.
+        if (!opts.silent) { const t = $('#reportTitle'); t.tabIndex = -1; t.focus({ preventScroll: true }); }
+      }, 30);
+    }
     return true;
   }
 
@@ -873,10 +947,13 @@
     let parts = m ? m[2].split('.') : [];
     if (m && parts.length === ALL_IDS.length + 1 && parts[parts.length - 1] === '') parts = parts.slice(0, -1); // stray trailing '.'
     if (!m || !CODE_CATS[code] || parts.length !== ALL_IDS.length) {
-      showStatus('warn', 'That report link couldn\'t be read. Enter your splits below, or ask for the link again.');
+      showStatus('warn', 'That report link couldn\'t be read. Enter your splits below, or ask for the link again.', null, 'badlink');
       return false;
     }
     setCat(CODE_CATS[code]);
+    state.pendingExample = false;
+    hideStatus('badlink');
+    hideStatus('ask-cat');
     ALL_IDS.forEach((id, i) => setValue(id, parts[i] === '' ? null : +parts[i], true, 'link'));
     $('#t-goal').value = m[3] ? fmt(+m[3]) : '';
     refreshTotals();
@@ -903,7 +980,6 @@
   let tipSeq = 0;
   function tipAttr(title, rows, note) { const k = 't' + (++tipSeq); TIPS[k] = { title, rows, note }; return ' data-tip="' + k + '"'; }
 
-  function deltaClass(d) { return Math.abs(d) < 0.5 ? 'delta-even' : d > 0 ? 'delta-gain' : 'delta-strong'; }
   function deltaWords(d) { const r = Math.round(d); if (r === 0) return 'right on typical'; return fmt(Math.abs(r)) + (r > 0 ? ' slower than typical' : ' faster than typical'); }
   // Where a split sits among athletes (or teams) who finished in about your time. The share only
   // shows when it agrees with the seconds next to it (typical adds up to your time; the peer middle
@@ -919,248 +995,103 @@
     if (!side) return 'About the middle of ' + who + '.';
     return (side > 0 ? 'Slower' : 'Faster') + ' than about ' + peerPct(i) + '% of ' + who + (cat.group === 'doubles' ? ' (estimated from singles spreads).' : '.');
   }
-  function peerShort(i, cat) {
-    const who = cat.unit + ' at your time', side = peerSide(i), about = cat.group === 'doubles' ? 'about ' : '';
-    if (i.noShare) return 'Outside our race data';
-    if (!side) return 'About the middle of ' + who;
-    return (side > 0 ? 'Slower' : 'Faster') + ' than ' + about + peerPct(i) + '% of ' + who;
-  }
-  // Finish level in the division, e.g. "Top 5% of Mixed Doubles teams". Left off past the 90th percentile.
-  function levelText(res) {
-    const p = res.pct, u = res.cat.label + (res.cat.unit === 'teams' ? ' teams' : ' athletes');
-    if (p < 1) return 'Top 1% of ' + u;
-    if (p <= 33) return 'Top ' + Math.round(p) + '% of ' + u;
-    if (p <= 90) return 'Faster than ' + Math.round(100 - p) + '% of ' + u;
-    return '';
-  }
   // The finish time your peers are matched on: your official time unless your splits (with a
   // typical first lap) differ from it by more than a minute.
   function peerTime(res) { return Math.abs(res.Tp - res.official) <= 60 ? res.official : res.Tp; }
-  // Doubles at 100+ min: the run/Roxzone split in the data is modelled, so read them together.
+  // Doubles at 95+ min: the run/Roxzone split in the data is modelled, so read the two together.
+  // Running is drawn per km and Roxzone in full, so their combined gap is given in words.
+  const mixedRunRox = res => res.cat.group === 'doubles' && res.Tp >= 5700;
+  function togetherText(res) {
+    const run = res.items.find(i => i.key === 'run'), rox = res.items.find(i => i.key === 'rox');
+    return 'combined they\'re ' + deltaWords(run.d + rox.d) + ' (running ' + fmtDelta(run.d) + ' over Runs 2–8, Roxzone ' + fmtDelta(rox.d) + ')';
+  }
   function mixedNote(res, key) {
-    return res.cat.group === 'doubles' && res.Tp >= 5700 && (key === 'run' || key === 'rox')
-      ? ' At this level, running and transitions are hard to separate in the data, so read Running and Roxzone together.' : '';
+    return mixedRunRox(res) && (key === 'run' || key === 'rox')
+      ? ' At this level, running and transitions are hard to separate in the data, so read Running and Roxzone together: ' + togetherText(res) + '.' : '';
   }
 
+  // The report is two panels: strengths & weak spots first, then the path to a goal.
   function renderReport(res) {
     tipSeq = 0;
     Object.keys(TIPS).forEach(k => delete TIPS[k]);
     const cat = res.cat;
-    const runItem = res.items.find(i => i.key === 'run');
     const roxItem = res.items.find(i => i.key === 'rox');
-    const stE = sum(ST_IDS.map(k => res.E[k]));
-    const dbl = cat.group === 'doubles';
-    const unitWord = dbl ? 'team' : 'athlete';
+    const mixed = mixedRunRox(res);
     const notes = [];
     if (res.outside) notes.push('Your time is outside the range our race data covers, so the typical splits are extrapolated and your splits aren\'t rated. Treat the seconds as a rough guide.');
     else if (res.pct < 0.5 || res.pct > 98) notes.push('Few ' + cat.unit + ' finish in this time, so treat the numbers as a guide.');
-    else if (res.conf === 'l') notes.push(dbl && res.Tp >= 5700 ? 'At this finish time the doubles data can\'t cleanly separate running from Roxzone, so read those two together and treat the numbers as a guide.' : 'Our race data is thinner at this finish time, so treat the numbers as a guide.');
+    else if (res.conf === 'l' && !mixed) notes.push('Our race data is thinner at this finish time, so treat the numbers as a guide.');
+    if (mixed) notes.push('At this finish time the doubles data can\'t cleanly separate running from Roxzone, so read those two together: ' + togetherText(res) + '.' + (res.conf === 'l' && !res.outside ? ' Treat the numbers as a guide.' : ''));
     if (res.penalty) notes.push('Your official time is ' + fmt(res.penalty) + ' longer than your splits add up to, which usually means a penalty; the analysis uses your splits.');
     if (Math.abs(res.run1Gap) > 30) notes.push('Your Run 1 was ' + fmt(Math.abs(res.run1Gap)) + (res.run1Gap > 0 ? ' slower' : ' faster') + ' than a typical first lap (start laps vary by venue), so it isn\'t compared and your peers are matched on your other splits.');
     if (res.roxInferred) notes.push('Your Roxzone was worked out from your overall time, so any penalty is counted as Roxzone.' + (roxItem.z >= 0.67 ? ' If you had one, enter your Roxzone time from your results.' : ''));
     const pt = peerTime(res);
-
-    let h = '';
-    // Header
-    h += '<div class="r-head"><div>' +
-      '<span class="mono r-eyebrow">Your race report</span>' +
-      '<h2 class="r-time" id="reportTitle">' + fmt(res.official) + '</h2>' +
-      '<div class="r-tags"><span class="y">' + esc(cat.label) + '</span>' + (levelText(res) ? '<span>' + esc(levelText(res)) + '</span>' : '') + '<span>' + esc(bracketOf(res.official)) + '</span>' + (res.roxInferred ? '<span>Roxzone from overall</span>' : '') + '</div>' +
-      '<p class="r-compare">Compared with <b>' + esc(cat.who) + ' who finish in about ' + fmt(pt) + '</b>: what a typical ' + unitWord + ' at your time does on each run and station.' + (notes.length ? ' ' + esc(notes.join(' ')) : '') + '</p>' +
-      '</div><div class="r-actions">' +
-      '<button class="btn btn-ghost" type="button" data-act="copy">Copy link</button>' +
-      '<button class="btn btn-ghost" type="button" data-act="print">Print / PDF</button>' +
-      '<button class="btn btn-ghost" type="button" data-act="edit">Edit splits</button>' +
-      '</div></div>';
-
-    // Time on the table + KPIs
-    const onT = Math.round(res.onTable);
-    h += '<div class="panel"><div class="table-hero"><div class="th-left">' +
-      '<span class="mono">Time on the table</span>' +
-      '<div class="th-big">' + fmt(onT) + '</div>' +
-      '<p>If every split where you\'re slower than typical were simply <b>typical for your finish time</b>, and you kept your strengths, you\'d have crossed the line in about <b>' + fmt(res.projected) + '</b>' + (res.penalty ? ' (and without the penalty)' : '') + '.</p>' +
-      '</div><div class="kpis">' +
-      kpi('Running · 8 km', res.runTotal, res.runTotal - runItem.d, fmt(res.avg28) + '/km vs ' + fmt(res.expAvg28) + ' typical (Run 1 not compared)', ' on Runs 2–⁠8') +
-      kpi('Stations · all 8', res.stTotal, stE, 'Typical ' + fmt(stE)) +
-      kpi('Roxzone' + (res.roxInferred ? ' (from overall)' : ''), res.rox, res.E.rox, 'Typical ' + fmt(res.E.rox)) +
-      '</div></div></div>';
-
-    // Top time-savers
-    const top = res.leaks.slice(0, 3);
-    h += '<div class="panel keep"><div class="panel-h"><h3>Your biggest time-savers</h3><span class="mono">vs typical for ' + fmt(pt) + '</span></div>';
-    if (top.length) {
-      const topSum = sum(top.map(i => i.d));
-      // When a card is in the normal range, say why that can happen for the cards actually shown.
-      const par = top.filter(i => i.rating.id === 'par').map(i => i.key);
-      const wide = par.filter(k => k === 'rox' || k === 'push' || k === 'pull');
-      const why = !par.length ? ''
-        : wide.length === par.length ? ' Roxzone and sleds vary a lot between racers, so even a big gap there can still be within the normal range.'
-        : ' A gap can be big in seconds and still sit in the normal range for ' + cat.unit + ' at your time' + (par.includes('run') ? ' (running is the longest part of the race, so a minute there is only a few percent)' : '') + '.';
-      h += '<p class="panel-sub">' + (top.length > 1 ? 'These ' + top.length + ' add up to <b style="color:#fff">' + fmt(topSum) + '</b>. ' : '') +
-        'Start here: ' + (top.length > 1 ? 'they\'re' : 'it\'s') + ' your biggest gap' + (top.length > 1 ? 's' : '') + ' in seconds against ' + esc(cat.unit) + ' at your time.' + esc(why) + '</p>';
-      h += '<div class="panel-b" style="padding-left:0;padding-right:0;padding-bottom:0"><div class="savers" style="--n:' + top.length + '">' + top.map((i, n) =>
-        '<div class="saver"><div class="saver-top"><span class="saver-n">' + (n + 1) + '</span><h4>' + esc(i.label) + '</h4></div>' +
-        '<div class="saver-amt">' + fmtDelta(i.d) + '<small>vs typical</small></div>' +
-        '<div class="saver-cmp">You <b>' + fmt(i.actual) + '</b> · typical <b>' + fmt(i.exp) + '</b></div>' +
-        '<div class="saver-rate"><span class="rating ' + i.rating.id + '">' + esc(i.rating.text) + '</span><small>' + esc(peerShort(i, cat)) + '</small></div>' +
-        '<p>' + esc(tipFor(i.key, cat)) + '</p></div>').join('') + '</div></div>';
-    } else {
-      h += '<div class="savers-empty">No split is more than a few seconds slower than typical: a very balanced race. Your next minutes will come from getting fitter across the board, so check your goal plan below.</div>';
+    // When your peers' finish time isn't your official time, say why right where both are shown.
+    const why = [];
+    if (Math.round(pt) !== Math.round(res.official)) {
+      if (Math.abs(res.run1Gap) > 30) why.push('with a typical Run 1');
+      if (res.penalty) why.push('without the penalty');
     }
-    h += '</div>';
 
-    // Split profile (diverging bars)
-    h += '<div class="panel keep"><div class="panel-h"><h3>Strengths &amp; weak spots</h3>' +
-      '<div class="seg-toggle" role="group" aria-label="Sort"><button type="button" data-sort="gap" aria-pressed="true">Biggest gap</button><button type="button" data-sort="race" aria-pressed="false">Race order</button></div></div>' +
-      '<p class="panel-sub">Each bar is the difference between your split and the typical split for your finish time; the label under each name says where you sit among ' + esc(cat.unit) + ' at your time. Running is Runs 2–⁠8 together (Run 1\'s length varies by venue); each kilometre is broken out below.</p>' +
-      '<div class="panel-b"><div class="dv-legend"><span><i class="sw-gain"></i>Slower than typical</span><span><i class="sw-strong"></i>Faster than typical</span></div>' +
+    let h = '<h2 class="sr-only" id="reportTitle">Your race report: ' + esc(fmt(res.official)) + ', ' + esc(cat.label) + '</h2>';
+
+    // Strengths & weak spots (diverging bars)
+    h += '<div class="panel keep"><div class="panel-h"><h3>Strengths &amp; weak spots</h3></div>' +
+      '<div class="r-tags"><span class="y">' + esc(cat.label) + '</span><span>' + esc(fmt(res.official)) + ' finish</span></div>' +
+      '<p class="panel-sub">Compared with <b>' + esc(cat.who) + ' who finish in about ' + esc(fmt(pt)) + '</b>' + (why.length ? ' (your time ' + why.join(' and ') + ')' : '') + '. Each bar is how far your split is from the typical split at that time, and the label under each name says where you sit among them. Running is shown per kilometre: your average on Runs 2–8 (Run 1\'s length varies by venue). Tap or hover over a bar to see your time, the typical time and where you rank.</p>' +
+      '<div class="panel-b"><div class="dv-top"><div class="dv-legend"><span><i class="sw-gain"></i>Slower than typical</span><span><i class="sw-strong"></i>Faster than typical</span></div>' +
+      '<div class="seg-toggle" role="group" aria-label="Sort the bars"><button type="button" data-sort="gap" aria-pressed="true">Biggest gap</button><button type="button" data-sort="race" aria-pressed="false">Race order</button></div></div>' +
       '<div class="dv" id="dvChart"></div>' +
       '<div class="dv-axis" aria-hidden="true"><span></span><div><span>◀ Faster</span><span>Typical</span><span>Slower ▶</span></div><span></span></div>' +
+      (notes.length ? '<div class="dv-notes"><p>' + esc(notes.join(' ')) + '</p></div>' : '') +
       '</div></div>';
-
-    // Running
-    h += '<div class="panel"><div class="panel-h"><h3>Your running, km by km</h3><span class="mono">' + fmt(res.runTotal) + ' total · ' + fmt(res.avg) + ' avg (all 8 runs)</span></div>' +
-      '<div class="panel-b"><div class="run-grid"><div><div class="run-legend"><span><i style="background:var(--gain)"></i>You</span><span><i style="background:var(--typical)"></i>Typical at your finish time</span></div>' +
-      '<div class="run-chart" id="runChart"></div></div>' +
-      '<ul class="insights">' + runInsights(res).map(x => '<li class="' + x.c + '">' + x.h + '</li>').join('') + '</ul></div></div></div>';
 
     // Goal plan
     h += '<div class="panel" id="goalPanel">' + goalPanelHTML(res) + '</div>';
 
-    // Every split (table view)
-    h += '<div class="panel"><div class="panel-b"><details class="tblwrap"><summary>See every split as a table</summary><div class="tbl-scroll">' + splitTable(res) + '</div></details></div></div>';
-
-    // CTA
-    const names = res.leaks.slice(0, 2).map(i => i.name);
-    const ctaLine = names.length === 2 ? 'Your report points at ' + names[0] + ' and ' + names[1] + '.'
-      : names.length === 1 ? 'Your report points at ' + names[0] + '.' : 'Your race is balanced, so the next step is more engine everywhere.';
-    h += '<div class="cta-band"><div><span class="mono">Train it at Koda</span><h3>Turn your gaps into a PR</h3>' +
-      '<p>' + esc(ctaLine) + ' Koda CrossFit Iron View is an official HYROX affiliate gym in Louisville. Our HYROX classes train every station and the running in between, four days a week.</p>' +
-      '<p class="print-only">kodacrossfitironview.com/hyrox · (630) 292-0725 · 740 S Pierce Ave #5, Louisville, CO</p></div>' +
-      '<div class="cta-btns"><a class="btn btn-dark" href="https://www.kodacrossfitironview.com/hyrox" target="_blank" rel="noopener">See HYROX classes <span class="arr">→</span></a>' +
-      '<a class="btn btn-line" href="https://www.kodacrossfitironview.com/Contact" target="_blank" rel="noopener">Talk to a coach</a></div></div>';
-
-    h += '<p class="caveat">"Typical" is how ' + (dbl ? 'a team' : 'an athlete') + ' who finishes in your time usually splits the race (it adds up to your finish), Koda\'s estimate from published HYROX race statistics (<a href="#how">how it works</a>). One race is a snapshot: venue, judging and the day usually move a single split 20–60 seconds (more at some venues), and sleds and Roxzone vary most.</p>';
+    h += '<div class="r-actions">' +
+      '<button class="btn btn-ghost" type="button" data-act="copy">Copy link</button>' +
+      '<button class="btn btn-ghost" type="button" data-act="print">Print / PDF</button>' +
+      '<button class="btn btn-ghost" type="button" data-act="edit">Edit splits</button></div>';
+    h += '<p class="print-only">Koda CrossFit Iron View · kodacrossfitironview.com/hyrox · (630) 292-0725 · <span class="nw">740 S Pierce Ave #5, Louisville, CO</span></p>';
 
     $('#reportInner').innerHTML = h;
     renderDiverging(res, 'gap');
-    renderRunChart(res);
     bindReport(res);
   }
 
-  function kpi(label, val, exp, sub, suffix) {
-    const d = val - exp;
-    return '<div class="kpi"><span class="mono">' + esc(label) + '</span><span class="v">' + fmt(val) + '</span>' +
-      '<span class="d ' + deltaClass(d) + '">' + (Math.abs(d) < 0.5 ? 'on typical' : fmt(Math.abs(d)) + (d > 0 ? ' slower' : ' faster')) + esc(suffix || '') + '</span>' +
-      '<span class="t">' + esc(sub) + '</span></div>';
-  }
-
+  // Running is drawn per km (its Runs 2-8 gap ÷ 7), so its bar compares one kilometre with one
+  // station; its name block still gives the whole gap. Ratings don't change: they compare ratios.
+  // Each row's numbers are rounded once, so You − Typical = Difference wherever they're shown.
+  const shownD = i => (i.key === 'run' ? i.d / 7 : i.d);
   function renderDiverging(res, mode) {
     const items = res.items.slice();
-    if (mode === 'gap') items.sort((a, b) => b.d - a.d);
-    const maxAbs = Math.max(30, ...items.map(i => Math.abs(i.d)));
+    if (mode === 'gap') items.sort((a, b) => shownD(b) - shownD(a));
+    const maxAbs = Math.max(30, ...items.map(i => Math.abs(shownD(i))));
     $('#dvChart').innerHTML = items.map(i => {
-      const w = Math.min(50, (Math.abs(i.d) / maxAbs) * 50);
-      const cls = i.d >= 0 ? 'gain' : 'strong';
-      const isRun = i.key === 'run';
+      const isRun = i.key === 'run', d = shownD(i), dR = Math.round(d);
+      const w = Math.min(50, (Math.abs(d) / maxAbs) * 50);
+      const cls = d >= 0 ? 'gain' : 'strong';
+      const you = isRun ? Math.round(res.avg28) : i.actual, typ = you - dR, per = isRun ? '/km' : '';
       const note = i.rating.text + '. ' + peerLine(i, res.cat) +
         (isRun ? ' Run 1 isn\'t compared because its length depends on the venue\'s start.' + (venueRunNote(res) ? ' ' + venueRunNote(res) : '') : '') + mixedNote(res, i.key);
-      const tip = tipAttr(i.label, [['You', fmt(i.actual)], ['Typical', fmt(i.exp)], ['Difference', fmtDelta(i.d)]], note);
-      return '<div class="dv-row" tabindex="0"' + tip + ' aria-label="' + esc(i.label + ': you ' + fmt(i.actual) + ', typical ' + fmt(i.exp) + ', ' + deltaWords(i.d) + ', ' + i.rating.text) + '">' +
-        '<div class="dv-name"><b>' + nameHTML(i.key) + '</b><small>' + esc(i.rating.text) + '</small></div>' +
+      const rows = [['You', fmt(you) + per], ['Typical', fmt(typ) + per], ['Difference', fmtDelta(dR) + per]];
+      if (isRun) rows.push(['Over Runs 2–8', fmtDelta(i.d)]);
+      const tip = tipAttr(isRun ? 'Running · average km, Runs 2–8' : i.label, rows, note);
+      const aria = (isRun
+        ? 'Running, average kilometre on Runs 2 to 8: you ' + fmt(you) + ' per km, typical ' + fmt(typ) + ' per km, ' + deltaWords(dR) + ' per km, ' + deltaWords(i.d) + ' over the 7 km'
+        : i.label + ': you ' + fmt(you) + ', typical ' + fmt(typ) + ', ' + deltaWords(dR)) + '. ' + note;
+      return '<div class="dv-row" role="group" tabindex="0"' + tip + ' aria-label="' + esc(aria) + '">' +
+        '<div class="dv-name"><b>' + nameHTML(i.key) + '</b><small>' + esc(i.rating.text) + '</small>' +
+        (isRun ? '<small class="dv-tot">' + esc(fmtDelta(i.d)) + ' over 7 km</small>' : '') + '</div>' +
         '<div class="dv-track"><span class="dv-bar ' + cls + '" style="width:' + w.toFixed(2) + '%"></span></div>' +
-        '<div class="dv-val">' + fmtDelta(i.d) + '</div></div>';
+        '<div class="dv-val">' + fmtDelta(dR) + (isRun ? '<small>per km</small>' : '') + '</div></div>';
     }).join('');
   }
   // Many US venues log a bit more of the race as running, so a small running gap can be the venue.
   function venueRunNote(res) {
     const run = res.items.find(i => i.key === 'run');
     return run.d > 0 && run.d < 0.08 * run.exp ? 'Many venues, including most in the US, log a bit more of the race as running (often a minute or two), so part of a running gap this size can be the venue.' : '';
-  }
-
-  function runInsights(res) {
-    const out = [];
-    const who = res.cat.unit;
-    const run = res.items.find(i => i.key === 'run'), rid = run.rating.id;
-    const perKm = res.avg28 - res.expAvg28;
-    const pace = 'Runs 2–⁠8 your average kilometre was <b>' + fmt(res.avg28) + '</b>, about <b>' + Math.round(Math.abs(perKm)) + ' s ' + (perKm > 0 ? 'slower' : 'faster') + '</b> than typical for your finish time (' + fmt(res.expAvg28) + ')';
-    if (Math.abs(perKm) < 2) out.push({ c: '', h: 'On Runs 2–⁠8 your average kilometre (<b>' + fmt(res.avg28) + '</b>) is right on typical for your finish time.' });
-    else if (perKm > 0) {
-      const lead = rid === 'weak' || rid === 'big' ? 'Running cost you time: on ' : 'On ';
-      out.push({ c: rid === 'par' ? '' : 'g', h: lead + pace + '. Over those 7 km that\'s <b>' + fmt(perKm * 7) + '</b>.' + (venueRunNote(res) ? ' ' + venueRunNote(res) : '') });
-    } else {
-      const lead = rid === 'solid' || rid === 'strong' ? 'Running is a strength: on ' : perKm > -8 ? 'You ran a bit quicker than typical: on ' : 'You ran quicker than typical: on ';
-      out.push({ c: 's', h: lead + pace + '.' });
-    }
-
-    // Fade from Runs 2-4 to Runs 5-7, flagged only beyond about one peer spread (lap-to-lap noise).
-    const legSD = spreadAt(res.catKey, 'run', res.Tp)[1] / 0.81;
-    const fadeSD = Math.max(6, (res.run28 / 7) * legSD * Math.sqrt((2 * 0.4) / 3));
-    const extra = res.fade - res.typFade;
-    const fr = Math.round(res.fade);
-    const fadeTxt = fr === 0 ? 'held the same pace' : fr > 0 ? 'slowed about <b>' + fr + ' s per km</b>' : 'got about <b>' + (-fr) + ' s per km faster</b>';
-    const typTxt = Math.max(0, Math.round(res.typFade)) + ' s per km';
-    if (extra > fadeSD) out.push({ c: 'g', h: 'From Runs 2–⁠4 to Runs 5–⁠7 you ' + fadeTxt + '; ' + who + ' at your time slow about ' + typTxt + '. A bigger fade than usual: steadier early pacing and running straight off the stations are the fix.' });
-    else if (extra < -fadeSD) out.push({ c: 's', h: 'Strong second half: from Runs 2–⁠4 to Runs 5–⁠7 you ' + fadeTxt + ', better than the ~' + typTxt + ' ' + who + ' at your time usually lose.' });
-    else out.push({ c: '', h: 'Your pacing held up like a typical ' + (who === 'teams' ? 'team' : 'athlete') + ' at your time: from Runs 2–⁠4 to Runs 5–⁠7 you ' + fadeTxt + '.' });
-
-    if (res.runs[0] < res.runRows[0].shape * 0.9) out.push({ c: '', h: 'Run 1 (<b>' + fmt(res.runs[0]) + '</b>) was quick next to your other runs. Some venues have a short first lap; if yours didn\'t, starting a little slower usually pays back later.' });
-
-    let worst = 1;
-    for (let i = 1; i < 7; i++) if (res.runs[i] - res.runRows[i].shape > res.runs[worst] - res.runRows[worst].shape) worst = i;
-    // Flag a single lap only when it's well outside normal lap-to-lap variation (about 2 spreads of
-    // a lap around your own pace), since lap lengths also vary by venue.
-    const wGap = res.runs[worst] - res.runRows[worst].shape;
-    if (wGap > Math.max(20, 2.2 * legSD * Math.sqrt(0.4) * res.avg28)) out.push({ c: '', h: '<b>Run ' + (worst + 1) + '</b> (' + fmt(res.runs[worst]) + ') was your slowest for your pace, right after the <b>' + esc(AFTER[worst]) + '</b>. Lap lengths vary by venue, but if it felt hard, practise running straight off that station.' });
-    return out;
-  }
-
-  function renderRunChart(res) {
-    const box = $('#runChart');
-    if (!box) return;
-    const W = Math.max(290, box.clientWidth || (box.parentElement && box.parentElement.clientWidth) || 600), H = 270;
-    box.dataset.w = W;
-    const gapX = (W - 58) / 7;                 // space between runs on the x axis
-    const narrow = gapX < 72;
-    const m = { l: 46, r: 12, t: 14, b: narrow ? 30 : 44 };
-    const you = res.runs, typ = res.runRows.map(r => r.exp);
-    let lo = Math.min(...you, ...typ), hi = Math.max(...you, ...typ);
-    const span = Math.max(hi - lo, 30);
-    const step = span > 150 ? 60 : span > 70 ? 30 : 15;
-    lo = Math.floor((lo - span * 0.12) / step) * step;
-    hi = Math.ceil((hi + span * 0.12) / step) * step;
-    const x = i => m.l + (i * (W - m.l - m.r)) / 7;
-    const y = s => m.t + ((hi - s) * (H - m.t - m.b)) / (hi - lo);
-    let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="Run times for runs 1 to 8, yours and typical">';
-    for (let t = lo; t <= hi + 0.1; t += step) {
-      s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y(t) + '" y2="' + y(t) + '" stroke="rgba(223,213,195,0.12)" stroke-width="1"/>';
-      if (t + step <= hi + 0.1) s += '<text x="' + (m.l - 8) + '" y="' + (y(t) + 4) + '" text-anchor="end" fill="#9A938A" font-size="11" font-family="DM Mono, monospace">' + fmt(t) + '</text>';
-    }
-    s += '<text x="0" y="' + (y(hi) + 4) + '" text-anchor="start" fill="#DFD5C3" font-size="10" font-family="DM Mono, monospace">SLOWER ↑</text>';
-    for (let i = 0; i < 8; i++) {
-      s += '<text x="' + x(i) + '" y="' + (H - m.b + 18) + '" text-anchor="middle" fill="#DFD5C3" font-size="12" font-weight="600" font-family="Inter, sans-serif">' + (narrow ? 'R' : 'Run ') + (i + 1) + '</text>';
-      if (!narrow) s += '<text x="' + x(i) + '" y="' + (H - m.b + 33) + '" text-anchor="middle" fill="#9A938A" font-size="9.5" font-family="DM Mono, monospace">' + esc(i === 0 ? 'START' : afterLabel(AFTER[i], gapX >= 82)) + '</text>';
-    }
-    const path = arr => arr.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join(' ');
-    s += '<path d="' + path(typ) + '" fill="none" stroke="var(--typical)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
-    s += '<path d="' + path(you) + '" fill="none" stroke="var(--gain)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
-    typ.forEach((v, i) => { s += '<circle cx="' + x(i) + '" cy="' + y(v) + '" r="3.5" fill="var(--typical)" stroke="#222121" stroke-width="2"/>'; });
-    you.forEach((v, i) => { s += '<circle cx="' + x(i) + '" cy="' + y(v) + '" r="4.5" fill="var(--gain)" stroke="#222121" stroke-width="2"/>'; });
-    s += '<line id="rcX" x1="0" x2="0" y1="' + m.t + '" y2="' + (H - m.b) + '" stroke="rgba(255,255,255,0.35)" stroke-width="1" visibility="hidden"/>';
-    // hit areas, one per run
-    for (let i = 0; i < 8; i++) {
-      const x0 = i === 0 ? m.l - 10 : (x(i - 1) + x(i)) / 2, x1 = i === 7 ? W : (x(i) + x(i + 1)) / 2;
-      const r = res.runRows[i];
-      const tip = tipAttr('Run ' + (i + 1) + (r.after ? ' · after ' + r.after : ' · start'), [['You', fmt(r.actual), 'var(--gain)'], ['Typical', fmt(r.exp), 'var(--typical)'], ['Difference', fmtDelta(r.d)]],
-        i === 0 ? 'The start lap is shorter or longer at many venues, so Run 1 isn\'t compared.' : i === 7 ? 'Some venues stretch Run 8 toward the wall balls.' : null);
-      s += '<rect class="rc-hit" data-i="' + i + '" data-x="' + x(i) + '" x="' + x0 + '" y="' + m.t + '" width="' + (x1 - x0) + '" height="' + (H - m.t - m.b + 20) + '" fill="transparent" tabindex="0"' + tip + ' aria-label="Run ' + (i + 1) + ': you ' + fmt(r.actual) + ', typical ' + fmt(r.exp) + '"/>';
-    }
-    s += '</svg>';
-    box.innerHTML = s;
-  }
-  function afterLabel(name, long) {
-    const st = { 'SkiErg': 'SKI', 'Sled Push': 'PUSH', 'Sled Pull': 'PULL', 'Burpee Broad Jumps': 'BBJ', 'Row': 'ROW', 'Farmers Carry': 'CARRY', 'Sandbag Lunges': 'LUNGE' }[name] || '';
-    return long ? 'AFTER ' + st : st;
   }
 
   function goalPanelHTML(res) {
@@ -1225,35 +1156,13 @@
     return h + '</div>';
   }
 
-  // Short names for narrow screens. Running is Runs 2-8 where it's compared, all 8 km in the goal plan.
+  // Short names for narrow screens. In the strengths chart running is the average km on Runs 2-8;
+  // in the goal plan it's all 8 km.
   const SHORT = { ski: 'SkiErg', push: 'Sled Push', pull: 'Sled Pull', bbj: 'Burpee BJ', row: 'Row', farm: 'Farmers', lunge: 'Lunges', wb: 'Wall Balls', rox: 'Roxzone' };
   function nameHTML(key, plan) {
-    const long = key === 'run' ? (plan ? 'Running (all 8 km)' : 'Running (Runs 2–⁠8)') : META[key].name;
-    const short = key === 'run' ? (plan ? 'Running 8 km' : 'Runs 2–⁠8') : (SHORT[key] || long);
+    const long = key === 'run' ? (plan ? 'Running (all 8 km)' : 'Running (avg per km)') : META[key].name;
+    const short = key === 'run' ? (plan ? 'Running 8 km' : 'Run (avg/km)') : (SHORT[key] || long);
     return long === short ? esc(long) : '<span class="nm-l">' + esc(long) + '</span><span class="nm-s">' + esc(short) + '</span>';
-  }
-
-  function splitTable(res) {
-    let h = '<table class="st"><thead><tr><th>Split</th><th class="r">You</th><th class="r">Typical</th><th class="r">Diff.</th><th>Rating</th></tr></thead><tbody>';
-    const itemOf = k => res.items.find(i => i.key === k);
-    const dbl = res.cat.group === 'doubles';
-    const pctTxt = i => { const s = peerSide(i); return !s ? 'about the middle' : (s > 0 ? 'slower than ' : 'faster than ') + (dbl ? '~' : '') + peerPct(i) + '%'; };
-    const rated = i => esc(i.rating.text) + ' <span class="muted">(' + pctTxt(i) + ')</span>';
-    for (let r = 0; r < 8; r++) {
-      const rr = res.runRows[r];
-      h += '<tr><td class="run-row">Run ' + (r + 1) + '</td><td class="r">' + fmt(rr.actual) + '</td><td class="r">' + fmt(rr.exp) + '</td><td class="r">' + fmtDelta(rr.d) + '</td><td class="muted">' + (r === 0 ? 'Not compared (venue)' : 'Pacing only') + '</td></tr>';
-      const i = itemOf(ST_IDS[r]);
-      h += '<tr><td>' + esc(i.name) + '</td><td class="r">' + fmt(i.actual) + '</td><td class="r">' + fmt(i.exp) + '</td><td class="r">' + fmtDelta(i.d) + '</td><td>' + rated(i) + '</td></tr>';
-    }
-    const rox = itemOf('rox'), run = itemOf('run');
-    const stE = sum(ST_IDS.map(k => res.E[k]));
-    h += '<tr><td>Roxzone' + (res.roxInferred ? ' (from overall, incl. any penalties)' : '') + '</td><td class="r">' + fmt(rox.actual) + '</td><td class="r">' + fmt(rox.exp) + '</td><td class="r">' + fmtDelta(rox.d) + '</td><td>' + rated(rox) + '</td></tr>';
-    h += '<tr class="sum"><td>Running, <span class="nw">Runs 2–⁠8</span></td><td class="r">' + fmt(run.actual) + '</td><td class="r">' + fmt(run.exp) + '</td><td class="r">' + fmtDelta(run.d) + '</td><td>' + rated(run) + '</td></tr>';
-    h += '<tr class="sum"><td>Running, <span class="nw">all 8 km</span></td><td class="r">' + fmt(res.runTotal) + '</td><td class="r">' + fmt(res.E.run) + '</td><td class="r">' + fmtDelta(res.runTotal - res.E.run) + '</td><td></td></tr>';
-    h += '<tr class="sum"><td>Stations total</td><td class="r">' + fmt(res.stTotal) + '</td><td class="r">' + fmt(stE) + '</td><td class="r">' + fmtDelta(res.stTotal - stE) + '</td><td></td></tr>';
-    if (Math.round(res.official) !== Math.round(res.T)) h += '<tr class="sum"><td>Your splits add up to</td><td class="r">' + fmt(res.T) + '</td><td class="r">–</td><td class="r"></td><td></td></tr>';
-    h += '<tr class="sum"><td>Overall (official)</td><td class="r">' + fmt(res.official) + '</td><td class="r">–</td><td class="r"></td><td>' + (res.penalty ? '<span class="muted">incl. ' + fmt(res.penalty) + ' penalty</span>' : '') + '</td></tr>';
-    return h + '</tbody></table>';
   }
 
   function bindReport(res) {
@@ -1273,11 +1182,16 @@
         res.goalIgnored = false;
         res.plan = planGoal(res, g);
         $('#goalPanel').innerHTML = goalPanelHTML(res);
+        const nb = $('#goalPanel [data-goal="' + g + '"]');   // the panel was rebuilt: keep focus on the chip
+        if (nb) nb.focus();
         writeHash(res);
         refreshTotals();
       } else if (b.dataset.act === 'copy') copyLink();
       else if (b.dataset.act === 'print') window.print();
-      else if (b.dataset.act === 'edit') $('#analyze').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else if (b.dataset.act === 'edit') {
+        $('#analyze').scrollIntoView({ behavior: motion(), block: 'start' });
+        inputOf('run1').focus({ preventScroll: true });
+      }
     };
     lastRes = res;
   }
@@ -1299,39 +1213,37 @@
     if (top + r.height > window.innerHeight - 8) top = y - r.height - 14;
     tipEl.style.left = Math.max(8, left) + 'px';
     tipEl.style.top = Math.max(8, top) + 'px';
-    if (target.classList.contains('rc-hit')) {
-      const line = $('#rcX');
-      if (line) { line.setAttribute('x1', target.dataset.x); line.setAttribute('x2', target.dataset.x); line.setAttribute('visibility', 'visible'); }
-    }
   }
-  function hideTip() { tipEl.classList.remove('show'); const line = $('#rcX'); if (line) line.setAttribute('visibility', 'hidden'); }
+  // A tip opened by keyboard focus (or a tap) follows its row while the page scrolls and stays until
+  // focus moves on or Esc; a pointer tip follows the pointer.
+  let tipFocus = null;
+  function hideTip() { tipEl.classList.remove('show'); tipFocus = null; }
+  function showFocusTip(t) {
+    const r = t.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > window.innerHeight) { hideTip(); return; }
+    tipFocus = t;
+    showTip(t, r.left + Math.min(r.width, 220) / 2, r.top + r.height / 2);
+  }
   document.addEventListener('pointermove', e => {
     const t = e.target.closest && e.target.closest('[data-tip]');
-    if (t) showTip(t, e.clientX, e.clientY); else hideTip();
+    if (t) { tipFocus = null; showTip(t, e.clientX, e.clientY); } else if (!tipFocus) hideTip();
   });
   document.addEventListener('focusin', e => {
     const t = e.target.closest && e.target.closest('[data-tip]');
-    if (t) { const r = t.getBoundingClientRect(); showTip(t, r.left + Math.min(r.width, 220) / 2, r.top + r.height / 2); } else hideTip();
+    if (t) showFocusTip(t); else hideTip();
   });
-  window.addEventListener('scroll', hideTip, { passive: true });
+  window.addEventListener('scroll', () => {
+    if (tipFocus && document.activeElement === tipFocus) showFocusTip(tipFocus); else hideTip();
+  }, { passive: true });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hideTip(); });
 
   // ───────────────────────── Wire up ─────────────────────────
   function init() {
     buildGrid();
-    setCat(currentCat());
+    setCat(currentCat() || 'men-open');
 
-    // Division change: refresh the Quick picks, and re-run a visible report. If the splits no longer
-    // pass the checks, take the old report down rather than leave another division's numbers up.
-    $$('input[name="cat"]').forEach(r => r.addEventListener('change', () => {
-      setCat(r.value);
-      refreshTotals();
-      if (lastRes && !$('#report').hidden && !runAnalysis({ noScroll: true, silent: true })) {
-        $('#report').hidden = true;
-        lastRes = null;
-        try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignore */ }
-        $('#formError').scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }));
+    $$('input[name="kind"]').forEach(r => r.addEventListener('change', () => { if (r.checked) chooseKind(r.value); }));
+    $$('input[name="cat"]').forEach(r => r.addEventListener('change', () => { if (r.checked) chooseCat(r.value); }));
     grid.addEventListener('input', e => {
       if (!e.target.classList.contains('tin')) return;
       e.target.classList.remove('auto');
@@ -1389,7 +1301,6 @@
       if (Object.keys(parsed.got).length) $('#pasteBox').hidden = true;
     });
     $('#btnExample').addEventListener('click', () => fillExample());
-    $('#heroExample').addEventListener('click', () => { if (fillExample()) runAnalysis(); });
     $('#btnAnalyze').addEventListener('click', () => runAnalysis());
     $('#btnClear').addEventListener('click', () => {
       ALL_IDS.forEach(id => setValue(id, null));
@@ -1430,21 +1341,6 @@
       const files = Array.from((e.clipboardData && e.clipboardData.files) || []).filter(f => /^image\//.test(f.type));
       if (files.length) { e.preventDefault(); readScreenshots(files); }
     });
-
-    // Print the full split table too; put it back the way it was afterwards.
-    let reopened = [];
-    window.addEventListener('beforeprint', () => { reopened = $$('details.tblwrap:not([open])'); reopened.forEach(d => { d.open = true; }); });
-    window.addEventListener('afterprint', () => { reopened.forEach(d => { d.open = false; }); reopened = []; });
-
-    // Redraw the run chart whenever its width changes (rotation, resize, first layout).
-    const redraw = () => {
-      const box = $('#runChart');
-      if (lastRes && box && !$('#report').hidden && Math.abs(Math.max(290, box.clientWidth) - (+box.dataset.w || 0)) > 2) renderRunChart(lastRes);
-    };
-    // (next frame, so redrawing never re-enters the same observer loop)
-    if ('ResizeObserver' in window) new ResizeObserver(() => requestAnimationFrame(redraw)).observe($('#reportInner'));
-    let rz;
-    window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(redraw, 150); });
 
     refreshTotals();
     loadFromHash();

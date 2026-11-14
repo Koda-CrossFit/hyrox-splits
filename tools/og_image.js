@@ -7,9 +7,9 @@ const puppeteer = require(process.env.PUPPETEER_MODULE || 'puppeteer');
 const ROOT = path.resolve(__dirname, '..');
 const mark = 'data:image/png;base64,' + fs.readFileSync(path.join(ROOT, 'assets/koda-mark.png')).toString('base64');
 
-// The Men's Open sample report (same numbers as the hero preview), one scale for every bar:
-// zero line at 34%, width = 0.6875% per second.
-const rows = [['Wall Balls', 66, 'g', '+1:36'], ['Roxzone', 33.7, 'g', '+0:49'], ['Sled Push', 27.5, 'g', '+0:40'], ['Row', 9.6, 's', '−0:14'], ['Burpee BJ', 14.4, 's', '−0:21']];
+// The Men's Open "Try an example" race as the strengths chart draws it (running per km), one scale
+// for every bar: zero line at 34%, width = 0.6875% per second.
+const rows = [['Wall Balls', 66, 'g', '+1:36'], ['Roxzone', 33.7, 'g', '+0:49'], ['Sled Push', 27.5, 'g', '+0:40'], ['Row', 9.6, 's', '−0:14'], ['Burpee BJ', 14.4, 's', '−0:21'], ['Run / km', 16.5, 's', '−0:24']];
 const html = `<!doctype html><html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@500&family=Inter+Tight:wght@800;900&family=Inter:wght@600&display=swap" rel="stylesheet">
 <style>
@@ -28,7 +28,8 @@ const html = `<!doctype html><html><head><meta charset="utf-8">
   .brand span { color: #BDB6AC; font-family: 'DM Mono', monospace; font-weight: 500; font-size: 17px; letter-spacing: 0.06em; margin-left: 6px; }
   .card { position: absolute; right: 56px; top: 92px; width: 352px; border: 1px solid rgba(223,213,195,0.28); background: rgba(255,255,255,0.03); padding: 30px 30px 26px; }
   .card .lab { font-family: 'DM Mono', monospace; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; color: #E5DDCF; }
-  .card .big { font-weight: 900; font-size: 96px; letter-spacing: -0.035em; line-height: 0.95; color: #FFFF33; margin: 6px 0 20px; }
+  .card .fin { font-weight: 800; font-size: 30px; letter-spacing: -0.015em; line-height: 1.1; margin: 8px 0 18px; }
+  .card .fin span { color: #FFFF33; }
   .r { display: grid; grid-template-columns: 108px 1fr 60px; gap: 10px; align-items: center; padding: 7px 0; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 18px; }
   .r b { text-align: right; font-weight: 600; }
   .t { position: relative; height: 14px; }
@@ -46,8 +47,8 @@ const html = `<!doctype html><html><head><meta charset="utf-8">
   </div>
   <div class="brand"><img src="${mark}">Koda CrossFit Iron View <span>Louisville, CO</span></div>
   <div class="card">
-    <div class="lab">Time on the table</div>
-    <div class="big">3:28</div>
+    <div class="lab">Strengths &amp; weak spots</div>
+    <div class="fin">Men's Open · <span>1:23:11</span></div>
     ${rows.map(r => `<div class="r"><span>${r[0]}</span><div class="t"><i class="${r[2]}" style="width:${r[1]}%"></i></div><b>${r[3]}</b></div>`).join('')}
   </div>
 </body></html>`;

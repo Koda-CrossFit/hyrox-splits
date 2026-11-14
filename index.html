@@ -9,7 +9,7 @@
   <meta property="og:type" content="website">
   <meta property="og:title" content="Where's your time hiding? · Koda Split Analyzer for HYROX races">
   <meta property="og:description" content="Enter your HYROX race splits and see where you're losing the most time, compared with athletes who finish where you do.">
-  <meta property="og:image" content="https://koda-crossfit.github.io/hyrox-splits/assets/og-splits.jpg">
+  <meta property="og:image" content="https://koda-crossfit.github.io/hyrox-splits/assets/og-splits.jpg?v=2">
   <meta property="og:url" content="https://koda-crossfit.github.io/hyrox-splits/">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/png" href="assets/koda-mark.png">
@@ -117,7 +117,8 @@
       font-size: clamp(8rem, 26vw, 22rem); line-height: 0.8; letter-spacing: -0.05em;
       color: transparent; -webkit-text-stroke: 1px rgba(223,213,195,0.09); pointer-events: none; user-select: none;
     }
-    .hero-grid { position: relative; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 52px; align-items: center; }
+    .hero-grid { position: relative; }
+    .hero-grid > div { max-width: 760px; }
     .hero .eyebrow { color: var(--sand-2); margin-bottom: 18px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
     .hero .eyebrow .tag { background: var(--yellow); color: var(--ink); padding: 3px 8px 2px; }
     h1.hero-title { font-family: var(--display); font-weight: 900; font-size: clamp(3rem, 8.4vw, 6.2rem); line-height: 0.9; letter-spacing: -0.035em; text-transform: uppercase; margin-bottom: 24px; }
@@ -129,33 +130,11 @@
     .fact .mono { display: block; color: var(--muted-dark); font-size: 0.68rem; margin-bottom: 2px; }
     .fact strong { display: block; font-size: 0.98rem; font-weight: 600; color: #fff; white-space: nowrap; }
 
-    /* sample report card in the hero */
-    .preview { border: 1px solid var(--line-dark-2); background: rgba(255,255,255,0.03); padding: 24px 26px 22px; box-shadow: 0 30px 60px rgba(0,0,0,0.35); }
-    .pv-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 18px; }
-    .pv-top .mono { color: var(--muted-dark); font-size: 0.68rem; }
-    .pv-top b { font-family: var(--display); font-weight: 800; font-size: 1.05rem; }
-    .pv-label { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sand-2); }
-    .pv-big { font-family: var(--display); font-weight: 900; font-size: 3.6rem; line-height: 0.95; letter-spacing: -0.03em; color: var(--yellow); margin: 4px 0 2px; }
-    .pv-note { color: var(--muted-dark); font-size: 0.88rem; margin-bottom: 18px; }
-    .pv-rows { list-style: none; border-top: 1px solid var(--line-dark); padding-top: 12px; }
-    .pv-rows li { display: grid; grid-template-columns: 112px minmax(0, 1fr) 54px; gap: 10px; align-items: center; padding: 6px 0; font-size: 0.9rem; }
-    .pv-rows li span { font-weight: 600; white-space: nowrap; }
-    .pv-rows li b { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .pv-track { position: relative; height: 14px; }
-    .pv-track::before { content: ''; position: absolute; left: 34%; top: -5px; bottom: -5px; width: 1px; background: var(--line-dark-2); }
-    .pv-track i { position: absolute; top: 2px; height: 10px; }
-    .pv-track i.g { left: 34%; width: var(--w); background: var(--gain); border-radius: 0 4px 4px 0; }
-    .pv-track i.s { right: 66%; width: var(--w); background: var(--strong); border-radius: 4px 0 0 4px; }
-    @media (max-width: 900px) {
-      .hero { padding: 46px 0 56px; }
-      .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 36px; }
-    }
+    @media (max-width: 900px) { .hero { padding: 46px 0 56px; } }
     @media (max-width: 480px) {
       .wrap { padding: 0 16px; }
       .hero-sub { font-size: 1rem; }
       .hero-actions .btn { width: 100%; }
-      .preview { padding: 20px 18px 18px; }
-      .pv-rows li { grid-template-columns: 92px minmax(0, 1fr) 50px; font-size: 0.84rem; }
     }
 
     /* ── Analyzer (sand band) ── */
@@ -176,10 +155,27 @@
     .hint { font-size: 0.9rem; color: var(--muted); }
     .hint b { color: var(--ink); font-weight: 600; }
 
-    /* division chips */
-    .cat-groups { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-    .cat-groups > div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px 14px; align-items: center; }
-    .cat-groups .lbl { margin-bottom: 0; }
+    /* division: Singles or Doubles first (two big tiles), then that type's divisions */
+    .kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
+    .kind { position: relative; display: block; cursor: pointer; }
+    .kind input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .kind > span {
+      position: relative; display: grid; grid-template-columns: 46px minmax(0, 1fr); column-gap: 14px; align-items: center; align-content: center;
+      height: 100%; padding: 16px 44px 16px 18px; border: 1.5px solid var(--edge); border-radius: 2px; background: #fff;
+      transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+    }
+    .kind svg { grid-row: span 2; width: 46px; height: 34px; }
+    .kind b { font-family: var(--display); font-weight: 900; font-size: 1.45rem; letter-spacing: -0.01em; text-transform: uppercase; line-height: 1.05; }
+    .kind small { font-size: 0.9rem; color: var(--muted); line-height: 1.3; }
+    .kind > span::after { content: ''; position: absolute; top: 50%; right: 16px; width: 18px; height: 18px; margin-top: -9px; border-radius: 50%; border: 1.5px solid var(--edge); box-sizing: border-box; }
+    .kind:hover > span { border-color: var(--ink); }
+    .kind input:checked + span { background: var(--ink); border-color: var(--ink); color: #fff; }
+    .kind input:checked + span small { color: var(--sand-2); }
+    .kind input:checked + span svg { color: var(--yellow); }
+    .kind input:checked + span::after { background: var(--yellow); border-color: var(--yellow); box-shadow: inset 0 0 0 4px var(--ink); }
+    .kind input:focus-visible + span { box-shadow: 0 0 0 3px var(--yellow), 0 0 0 4.5px var(--ink); outline: 2px solid transparent; outline-offset: 4px; }
+    .cat-pick[hidden] { display: none; }
+    .cat-pick .lbl { margin-bottom: 10px; }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .chip { position: relative; display: inline-flex; cursor: pointer; }
     .chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -192,9 +188,29 @@
     .chip:hover span { border-color: var(--ink); }
     .chip input:checked + span { background: var(--ink); border-color: var(--ink); color: #fff; }
     .chip input:checked + span::before { background: var(--yellow); border-color: var(--yellow); }
-    .chip input:focus-visible + span { box-shadow: 0 0 0 3px var(--yellow), 0 0 0 4.5px var(--ink); }
+    .chip input:focus-visible + span { box-shadow: 0 0 0 3px var(--yellow), 0 0 0 4.5px var(--ink); outline: 2px solid transparent; outline-offset: 4px; }
     .cat-note { font-size: 0.88rem; color: var(--muted); margin-top: 14px; }
-    @media (max-width: 700px) { .cat-groups > div { grid-template-columns: minmax(0, 1fr); } .chip span { padding: 10px 12px; font-size: 0.82rem; } }
+    .cat-note:empty { display: none; }
+    .cat-note.ask { color: var(--ink); font-weight: 600; }
+    @media (max-width: 700px) { .chip span { padding: 10px 12px; font-size: 0.82rem; } }
+    @media (max-width: 560px) {
+      .kinds { gap: 8px; }
+      .kind > span { grid-template-columns: minmax(0, 1fr); row-gap: 4px; align-content: start; padding: 14px 36px 14px 14px; }
+      .kind svg { grid-row: auto; width: 40px; height: 30px; }
+      .kind b { font-size: 1.2rem; }
+      .kind small { font-size: 0.82rem; }
+      .kind > span::after { top: 16px; right: 12px; margin-top: 0; }
+    }
+    @media (max-width: 340px) {
+      .kind > span { padding-right: 12px; }   /* the dot sits in the icon row here, so the text needs no gutter */
+      .kind b { font-size: 1.05rem; }
+      .tin { padding: 12px 8px; }
+    }
+    /* Windows contrast themes drop backgrounds and shadows: mark the picked tile/chip with an outline */
+    @media (forced-colors: active) {
+      .kind input:checked + span, .chip input:checked + span { border-color: Highlight; outline: 2px solid Highlight; outline-offset: -5px; }
+      .kind input:checked + span::after, .chip input:checked + span::before { forced-color-adjust: none; background: Highlight; border-color: Highlight; }
+    }
 
     /* fill helpers */
     .import { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
@@ -234,15 +250,17 @@
     .round .rn { font-family: var(--display); font-weight: 900; font-size: 1rem; color: var(--edge); padding-bottom: 13px; letter-spacing: -0.01em; }
     .round.last { background: linear-gradient(90deg, rgba(255,255,51,0.0), rgba(255,255,51,0)); }
     .sf { display: block; min-width: 0; }
-    .sl { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; font-family: var(--mono); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 5px; white-space: nowrap; }
-    .sl small { color: var(--muted); font-size: 0.66rem; overflow: hidden; text-overflow: ellipsis; }
+    /* each run and station named big and bold, its distance small on the right */
+    .sl { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 7px; }
+    .sl b { font-family: var(--display); font-weight: 800; font-size: 1.18rem; letter-spacing: -0.005em; text-transform: uppercase; line-height: 1.15; color: var(--ink); }
+    .sl small { flex-shrink: 0; font-family: var(--mono); font-weight: 500; font-size: 0.74rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
     .tin {
-      width: 100%; padding: 11px 12px; background: #fff; border: 1px solid #8C867F; border-radius: 2px; color: var(--ink);
-      font-size: 1.06rem; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
+      width: 100%; padding: 12px 14px; background: #fff; border: 1px solid #8C867F; border-radius: 2px; color: var(--ink);
+      font-size: 1.2rem; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
       transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     }
-    .tin::placeholder { color: #B7B1A8; font-weight: 500; }
-    .tin:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px rgba(255,255,51,0.9), 0 0 0 4px var(--ink); }
+    .tin::placeholder { color: #757068; font-weight: 500; }
+    .tin:focus { outline: 2px solid transparent; outline-offset: 2px; border-color: var(--ink); box-shadow: 0 0 0 3px rgba(255,255,51,0.9), 0 0 0 4px var(--ink); }
     .tin.auto { box-shadow: inset 4px 0 0 var(--yellow-deep); }
     .tin.auto:focus { box-shadow: inset 4px 0 0 var(--yellow-deep), 0 0 0 3px rgba(255,255,51,0.9), 0 0 0 4px var(--ink); }
     .tin.bad { border-color: var(--error); background: #FFF6F5; }
@@ -269,6 +287,7 @@
       .card-head { padding: 16px; }
       .round { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr); gap: 8px 10px; }
       .round .rn { font-size: 0.86rem; }
+      .sl b { font-size: 1.02rem; }
       .sl small { display: none; }
     }
 
@@ -290,66 +309,24 @@
     .report { background: var(--ink); color: #fff; padding: 64px 0 80px; border-top: 1px solid var(--line-dark); }
     .report[hidden] { display: none; }
     .report .container { max-width: 1000px; }
-    .r-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px 28px; align-items: end; margin-bottom: 26px; }
-    .r-eyebrow { color: var(--yellow); display: block; margin-bottom: 10px; }
-    .r-time { font-family: var(--display); font-weight: 900; font-size: clamp(3.6rem, 11vw, 6.4rem); line-height: 0.88; letter-spacing: -0.035em; }
-    .r-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-    .r-tags span { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--line-dark-2); padding: 4px 9px 3px; color: var(--sand); }
-    .r-tags span.y { background: var(--yellow); color: var(--ink); border-color: var(--yellow); }
-    .r-compare { color: var(--muted-dark); margin-top: 12px; max-width: 620px; font-size: 0.98rem; }
-    .r-compare b { color: #fff; font-weight: 600; }
-    .r-actions { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
-    .r-actions .btn { padding: 11px 16px; font-size: 0.78rem; }
-    @media (max-width: 700px) { .r-head { grid-template-columns: minmax(0, 1fr); } .r-actions { flex-direction: row; flex-wrap: wrap; } }
-
     .panel { background: var(--ink-2); border: 1px solid var(--line-dark); margin-bottom: 16px; }
     .panel-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px 18px; padding: 22px 26px 0; flex-wrap: wrap; }
     .panel-h h3 { font-family: var(--display); font-weight: 800; font-size: 1.32rem; letter-spacing: -0.005em; text-transform: uppercase; line-height: 1.15; }
+    .panel-h h3:focus { outline: none; }
     .panel-h .mono { color: var(--muted-dark); font-size: 0.7rem; }
     .panel-sub { color: var(--muted-dark); font-size: 0.94rem; padding: 6px 26px 0; max-width: 760px; }
+    .panel-sub b { color: #fff; font-weight: 600; }
     .panel-b { padding: 18px 26px 24px; }
-    @media (max-width: 560px) { .panel-h { padding: 18px 16px 0; } .panel-sub { padding: 6px 16px 0; } .panel-b { padding: 16px 16px 20px; } }
-
-    /* hero number + KPI row */
-    .table-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 0; }
-    .th-left { padding: 26px 26px 24px; border-right: 1px solid var(--line-dark); }
-    .th-left .mono { color: var(--sand-2); font-size: 0.72rem; display: block; }
-    .th-big { font-family: var(--display); font-weight: 900; font-size: clamp(3.4rem, 9vw, 5rem); letter-spacing: -0.035em; line-height: 0.95; color: var(--yellow); margin: 6px 0 8px; }
-    .th-left p { color: var(--muted-dark); font-size: 0.95rem; }
-    .th-left p b { color: #fff; font-weight: 600; }
-    .kpis { display: grid; grid-template-columns: minmax(0, 1fr); }
-    .kpi { padding: 16px 24px; border-top: 1px solid var(--line-dark); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 14px; align-items: baseline; }
-    .kpi:first-child { border-top: 0; }
-    .kpi .mono { color: var(--muted-dark); font-size: 0.7rem; grid-column: 1 / -1; }
-    .kpi .v { font-family: var(--display); font-weight: 800; font-size: 1.6rem; letter-spacing: -0.015em; }
-    .kpi .d { text-align: right; font-size: 0.9rem; font-weight: 600; white-space: nowrap; }
-    .kpi .t { grid-column: 1 / -1; color: var(--muted-dark-2); font-size: 0.84rem; }
-    .delta-gain { color: var(--yellow); }
-    .delta-strong { color: var(--strong-text); }
-    .delta-even { color: var(--muted-dark); }
-    @media (max-width: 760px) { .table-hero { grid-template-columns: minmax(0, 1fr); } .th-left { border-right: 0; border-bottom: 1px solid var(--line-dark); padding: 22px 16px; } .kpi { padding: 14px 16px; } }
-
-    /* top time-savers */
-    .savers { display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 1px; background: var(--line-dark); border-top: 1px solid var(--line-dark); }
-    .saver { background: var(--ink-2); padding: 22px 22px 22px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-    .saver-top { display: flex; align-items: center; gap: 12px; }
-    .saver-n { width: 30px; height: 30px; border-radius: 50%; background: var(--yellow); color: var(--ink); display: flex; align-items: center; justify-content: center; font-family: var(--display); font-weight: 900; font-size: 0.95rem; flex-shrink: 0; }
-    .saver h4 { font-family: var(--display); font-weight: 800; font-size: 1.12rem; text-transform: uppercase; letter-spacing: -0.005em; line-height: 1.15; }
-    .saver-amt { font-family: var(--display); font-weight: 900; font-size: 2.4rem; letter-spacing: -0.03em; line-height: 1; color: var(--yellow); }
-    .saver-amt small { font-family: 'Inter', sans-serif; font-size: 0.82rem; font-weight: 600; letter-spacing: 0; color: var(--muted-dark); margin-left: 6px; }
-    .saver-cmp { font-size: 0.88rem; color: var(--muted-dark); }
-    .saver-cmp b { color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .saver p { font-size: 0.92rem; color: var(--sand); line-height: 1.55; }
-    .saver-rate { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-    .saver-rate small { font-size: 0.82rem; color: var(--muted-dark); }
-    .rating { display: inline-block; width: fit-content; font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 7px 2px; border: 1px solid var(--line-dark-2); color: var(--sand); }
-    .rating.big { background: var(--yellow); color: var(--ink); border-color: var(--yellow); }
-    .rating.weak { border-color: rgba(255,255,51,0.55); color: var(--yellow); }
-    .rating.strong, .rating.solid { border-color: rgba(57,135,229,0.65); color: var(--strong-text); }
-    .savers-empty { padding: 22px 26px 26px; color: var(--sand); }
-    @media (max-width: 860px) { .savers { grid-template-columns: minmax(0, 1fr); } .saver { padding: 18px 16px; } }
+    /* the race the report is for, under the first panel's title */
+    .r-tags { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 26px 4px; }
+    .r-tags span { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--line-dark-2); padding: 4px 9px 3px; color: var(--sand); font-variant-numeric: tabular-nums; }
+    .r-tags span.y { background: var(--yellow); color: var(--ink); border-color: var(--yellow); }
+    .r-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .r-actions .btn { padding: 11px 16px; font-size: 0.78rem; }
+    @media (max-width: 560px) { .panel-h { padding: 18px 16px 0; } .panel-sub { padding: 6px 16px 0; } .panel-b { padding: 16px 16px 20px; } .r-tags { padding: 10px 16px 4px; } }
 
     /* diverging split chart */
+    .dv-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; }
     .dv-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 0.84rem; color: var(--sand); }
     .dv-legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 7px; vertical-align: -1px; }
     .sw-gain { background: var(--gain); } .sw-strong { background: var(--strong); }
@@ -359,9 +336,11 @@
     .seg-toggle button[aria-pressed="true"] { background: rgba(255,255,255,0.1); color: #fff; }
     .dv { margin-top: 10px; }
     .dv-row { display: grid; grid-template-columns: minmax(120px, 190px) minmax(0, 1fr) 66px; gap: 14px; align-items: center; padding: 6px 0; border-radius: 2px; cursor: default; }
-    .dv-row:hover, .dv-row:focus-visible { background: rgba(255,255,255,0.04); outline: none; }
+    .dv-row:hover { background: rgba(255,255,255,0.04); }
+    .dv-row:focus { outline: none; }
+    .dv-row:focus-visible { background: rgba(255,255,255,0.04); outline: 2px solid var(--yellow); outline-offset: 2px; }
     .dv-name { min-width: 0; line-height: 1.25; }
-    .dv-name b { display: block; font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dv-name b { display: block; font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
     .dv-name small { display: block; font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted-dark-2); }
     .dv-track { position: relative; height: 22px; }
     .dv-track::before { content: ''; position: absolute; left: 50%; top: -8px; bottom: -8px; width: 1px; background: var(--line-dark-2); }
@@ -369,6 +348,11 @@
     .dv-bar.gain { left: 50%; background: var(--gain); border-radius: 0 4px 4px 0; }
     .dv-bar.strong { right: 50%; background: var(--strong); border-radius: 4px 0 0 4px; }
     .dv-val { text-align: right; font-weight: 600; font-size: 0.92rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    /* running is drawn per km: its caption says so, and the name block carries the whole gap */
+    .dv-val small { display: block; font-family: var(--mono); font-weight: 500; font-size: 0.62rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted-dark-2); line-height: 1.3; }
+    .dv-name small.dv-tot { color: var(--sand-3); }
+    .dv-notes { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-dark); }
+    .dv-notes p { color: var(--muted-dark); font-size: 0.86rem; line-height: 1.55; max-width: 760px; }
     .dv-axis { display: grid; grid-template-columns: minmax(120px, 190px) minmax(0, 1fr) 66px; gap: 14px; margin-top: 8px; }
     .dv-axis div { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-dark-2); }
     .dv-axis div span:nth-child(2) { color: var(--sand); }
@@ -377,20 +361,11 @@
       .dv-name b { font-size: 0.86rem; }
       .dv-val { font-size: 0.84rem; }
       .dv-axis div span:nth-child(2) { display: none; }
+      /* keep "◀ Faster" and "Slower ▶" whole: on the narrowest phones Slower drops to its own line, right-aligned */
+      .dv-axis div { flex-wrap: wrap; }
+      .dv-axis div span { white-space: nowrap; }
+      .dv-axis div span:last-child { margin-left: auto; }
     }
-
-    /* running */
-    .run-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 24px; align-items: start; }
-    .run-chart { position: relative; min-height: 270px; }
-    .run-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
-    .run-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.84rem; color: var(--sand); margin-bottom: 6px; }
-    .run-legend i { display: inline-block; width: 18px; height: 2px; margin-right: 7px; vertical-align: 4px; border-radius: 1px; }
-    .insights { list-style: none; display: grid; gap: 12px; }
-    .insights li { padding: 12px 14px; background: var(--ink-3); border-left: 3px solid var(--line-dark-2); font-size: 0.93rem; color: var(--sand); line-height: 1.5; }
-    .insights li.g { border-left-color: var(--yellow); }
-    .insights li.s { border-left-color: var(--strong); }
-    .insights li b { color: #fff; font-weight: 600; }
-    @media (max-width: 860px) { .run-grid { grid-template-columns: minmax(0, 1fr); } }
 
     /* goal plan */
     .goal-top { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin-bottom: 16px; }
@@ -419,36 +394,7 @@
     @media (max-width: 560px) { .gt .hide-sm { display: none; } .gt .cutcell, .gt th.cutcell { width: 40%; padding-left: 12px; } .cut { grid-template-columns: minmax(0, 1fr) 46px; gap: 6px; } .gt { font-size: 0.86rem; } }
     @media (max-width: 360px) { .gt .cutcell, .gt th.cutcell { width: 34%; padding-left: 6px; } .gt td, .gt th { padding-right: 4px; } .cut { grid-template-columns: minmax(0, 1fr) 42px; gap: 4px; } }
 
-    /* full split table */
-    details.tblwrap > summary { cursor: pointer; font-weight: 700; font-size: 0.92rem; color: var(--sand); width: fit-content; list-style: none; display: inline-flex; align-items: center; gap: 8px; }
-    details.tblwrap > summary::-webkit-details-marker { display: none; }
-    details.tblwrap > summary::before { content: '+'; display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border: 1px solid var(--line-dark-2); font-weight: 700; }
-    details.tblwrap[open] > summary::before { content: '−'; }
-    .st { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 14px; }
-    .st th { text-align: left; font-family: var(--mono); font-weight: 500; font-size: 0.64rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted-dark-2); padding: 0 8px 8px 0; border-bottom: 1px solid var(--line-dark-2); white-space: nowrap; }
-    .st td { padding: 8px 8px 8px 0; border-bottom: 1px solid var(--line-dark); font-variant-numeric: tabular-nums; }
-    .st tr.sum td { font-weight: 700; color: #fff; }
-    .st .r, .st th.r { text-align: right; }
-    .st td.run-row { color: var(--sand); }
-    .st .muted { color: var(--muted-dark-2); font-size: 0.84rem; }
-    .st .nw { white-space: nowrap; }
-    @media (max-width: 560px) { .st td span.muted { display: none; } .st { font-size: 0.84rem; } }
-    @media (max-width: 400px) { .st { font-size: 0.78rem; } .st td, .st th { padding-right: 4px; } }
-    @media (max-width: 340px) { .st th:nth-child(4), .st td:nth-child(4) { display: none; } }
     .goal-note.goal-lead { margin: 0 0 14px; }
-    .tbl-scroll { overflow-x: auto; }
-
-    /* CTA band */
-    .cta-band { background: var(--yellow); color: var(--ink); padding: 34px 30px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px 30px; align-items: center; margin-top: 26px; }
-    .cta-band .mono { display: block; margin-bottom: 8px; font-size: 0.72rem; }
-    .cta-band h3 { font-family: var(--display); font-weight: 900; font-size: clamp(1.9rem, 4.6vw, 2.9rem); text-transform: uppercase; letter-spacing: -0.03em; line-height: 0.95; margin-bottom: 10px; }
-    .cta-band p { max-width: 560px; font-size: 1rem; }
-    .cta-btns { display: flex; flex-direction: column; gap: 10px; }
-    .cta-btns .btn-line { border-color: var(--ink); }
-    @media (max-width: 760px) { .cta-band { grid-template-columns: minmax(0, 1fr); padding: 26px 18px; } .cta-btns { flex-direction: row; flex-wrap: wrap; } .cta-btns .btn { flex: 1; } }
-
-    .caveat { color: var(--muted-dark-2); font-size: 0.84rem; margin-top: 18px; line-height: 1.55; }
-    .caveat a { color: var(--sand); }
 
     /* ── How it works (sand band) ── */
     .method { background: var(--sand); padding: 70px 0 76px; }
@@ -493,28 +439,25 @@
     @media print {
       @page { margin: 12mm; }
       html, body { background: #fff !important; }
-      .topbar, .hero, .analyzer, .method, .foot, .r-actions, .seg-toggle, .goal-chips, .cta-btns, .tip, .toast { display: none !important; }
+      .topbar, .hero, .analyzer, .method, .foot, .r-actions, .seg-toggle, .goal-chips, .tip, .toast { display: none !important; }
       .report { background: #fff !important; color: #111 !important; padding: 0 !important; border: 0; }
       .report * { color: #111 !important; }
-      .panel, .saver, .savers, .insights li { background: #fff !important; border-color: #ccc !important; }
-      /* Bars, swatches and chips are backgrounds: print them even with "background graphics" off. */
+      .panel { background: #fff !important; border-color: #ccc !important; }
+      /* Bars, swatches and tags are backgrounds: print them even with "background graphics" off. */
       .report, .report * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .panel { break-inside: auto; }
-      .panel.keep, .r-head, .table-hero, .kpi, .dv-row, .run-grid > div:first-child, .insights li, .gt tr, .st tr, .cta-band, .panel-h { break-inside: avoid; }
+      .panel.keep, .dv-row, .gt tr, .panel-h { break-inside: avoid; }
       .panel-h { break-after: avoid; }
-      .savers { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)) !important; }
       .gt tfoot { display: table-row-group; } /* print the Total once, not at the foot of every page */
       :root { --gain: #C8B900; --strong: #1F6FD1; --typical: #888; --line-dark: #ddd; --line-dark-2: #bbb; }
-      .th-big, .saver-amt, .delta-gain { color: #8A7F00 !important; }
-      .cta-band { background: #fff !important; border: 2px solid #111; }
       .goal-top { display: none; }
-      .print-only { display: block !important; margin-top: 8px; font-weight: 600; }
-      details.tblwrap > summary { display: none; }
-      .run-chart svg text { fill: #333 !important; }
-      .tbl-scroll { overflow: visible; }
-      .st td span.muted { display: inline !important; }
+      #goalPanel { break-inside: avoid; }   /* start the goal plan on a fresh page rather than strand its heading */
+      /* the screen-reader title becomes the printout's title */
+      #reportTitle { position: static; width: auto; height: auto; margin: 0 0 12px; clip: auto; overflow: visible; white-space: normal; font-family: var(--display); font-weight: 800; font-size: 1.3rem; text-transform: uppercase; }
+      .print-only { display: block !important; margin-top: 14px; font-weight: 600; font-size: 0.9rem; }
     }
     .print-only { display: none; }
+    .nw { white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -541,26 +484,12 @@
           <p class="hero-sub">Enter your HYROX race splits and see which stations, Roxzone and running are costing you the most, <strong>measured against athletes who finish where you do</strong>. Then see where your next PR is most likely to come from.</p>
           <div class="hero-actions">
             <a class="btn btn-yellow" href="#analyze">Analyze my race <span class="arr">→</span></a>
-            <button class="btn btn-ghost" type="button" id="heroExample">See a sample report</button>
           </div>
           <div class="hero-facts">
             <div class="fact"><span class="mono">Divisions</span><strong>Open, Pro &amp; Doubles</strong></div>
             <div class="fact"><span class="mono">Fill it in</span><strong>Screenshot, paste or type</strong></div>
             <div class="fact"><span class="mono">Cost</span><strong>Free, no sign-up</strong></div>
           </div>
-        </div>
-        <div class="preview" aria-hidden="true">
-          <div class="pv-top"><span class="mono">Sample report · Men's Open</span><b>1:23:11</b></div>
-          <div class="pv-label">Time on the table</div>
-          <div class="pv-big">3:28</div>
-          <div class="pv-note">Faster than you raced, if your weak spots were simply typical for your finish time.</div>
-          <ul class="pv-rows">
-            <li><span>Wall Balls</span><div class="pv-track"><i class="g" style="--w:66%"></i></div><b>+1:36</b></li>
-            <li><span>Roxzone</span><div class="pv-track"><i class="g" style="--w:33.7%"></i></div><b>+0:49</b></li>
-            <li><span>Sled Push</span><div class="pv-track"><i class="g" style="--w:27.5%"></i></div><b>+0:40</b></li>
-            <li><span>Row</span><div class="pv-track"><i class="s" style="--w:9.6%"></i></div><b>−0:14</b></li>
-            <li><span>Burpee BJ</span><div class="pv-track"><i class="s" style="--w:14.4%"></i></div><b>−0:21</b></li>
-          </ul>
         </div>
       </div>
     </section>
@@ -576,25 +505,32 @@
         <div class="card">
           <div class="card-head"><span class="card-num">01</span><span class="card-title">Your division</span></div>
           <div class="card-body">
-            <div class="cat-groups" id="catGroups">
-              <div>
-                <span class="lbl" id="lblSingles">Singles</span>
-                <div class="chips" role="radiogroup" aria-labelledby="lblSingles">
-                  <label class="chip"><input type="radio" name="cat" value="men-open" checked><span>Men Open</span></label>
-                  <label class="chip"><input type="radio" name="cat" value="women-open"><span>Women Open</span></label>
-                  <label class="chip"><input type="radio" name="cat" value="men-pro"><span>Men Pro</span></label>
-                  <label class="chip"><input type="radio" name="cat" value="women-pro"><span>Women Pro</span></label>
-                </div>
+            <span class="lbl" id="lblKind">Did you race singles or doubles?</span>
+            <div class="kinds" role="radiogroup" aria-labelledby="lblKind">
+              <label class="kind"><input type="radio" name="kind" value="singles" autocomplete="off" checked><span>
+                <svg viewBox="0 0 46 34" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="23" cy="9" r="5.5"/><path d="M12.5 31c0-6.6 4.7-10.8 10.5-10.8s10.5 4.2 10.5 10.8"/></svg>
+                <b>Singles</b><small>Just you</small></span></label>
+              <label class="kind"><input type="radio" name="kind" value="doubles" autocomplete="off"><span>
+                <svg viewBox="0 0 46 34" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="13" cy="9" r="5.5"/><path d="M3 31c0-6.6 4.5-10.8 10-10.8s10 4.2 10 10.8"/><circle cx="33" cy="9" r="5.5"/><path d="M23 31c0-6.6 4.5-10.8 10-10.8s10 4.2 10 10.8"/></svg>
+                <b>Doubles</b><small>You and a partner</small></span></label>
+            </div>
+            <div class="cat-pick" data-kind="singles">
+              <span class="lbl" id="lblSingles">Your singles division</span>
+              <div class="chips" role="radiogroup" aria-labelledby="lblSingles">
+                <label class="chip"><input type="radio" name="cat" value="men-open" autocomplete="off" checked><span>Men Open</span></label>
+                <label class="chip"><input type="radio" name="cat" value="women-open" autocomplete="off"><span>Women Open</span></label>
+                <label class="chip"><input type="radio" name="cat" value="men-pro" autocomplete="off"><span>Men Pro</span></label>
+                <label class="chip"><input type="radio" name="cat" value="women-pro" autocomplete="off"><span>Women Pro</span></label>
               </div>
-              <div>
-                <span class="lbl" id="lblDoubles">Doubles</span>
-                <div class="chips" role="radiogroup" aria-labelledby="lblDoubles">
-                  <label class="chip"><input type="radio" name="cat" value="dbl-men"><span>Men</span></label>
-                  <label class="chip"><input type="radio" name="cat" value="dbl-women"><span>Women</span></label>
-                  <label class="chip"><input type="radio" name="cat" value="dbl-mixed"><span>Mixed</span></label>
-                  <label class="chip"><input type="radio" name="cat" value="dbl-pro-men"><span>Pro Men</span></label>
-                  <label class="chip"><input type="radio" name="cat" value="dbl-pro-women"><span>Pro Women</span></label>
-                </div>
+            </div>
+            <div class="cat-pick" data-kind="doubles" hidden>
+              <span class="lbl" id="lblDoubles">Your doubles division</span>
+              <div class="chips" role="radiogroup" aria-labelledby="lblDoubles">
+                <label class="chip"><input type="radio" name="cat" value="dbl-men" autocomplete="off"><span>Men</span></label>
+                <label class="chip"><input type="radio" name="cat" value="dbl-women" autocomplete="off"><span>Women</span></label>
+                <label class="chip"><input type="radio" name="cat" value="dbl-mixed" autocomplete="off"><span>Mixed</span></label>
+                <label class="chip"><input type="radio" name="cat" value="dbl-pro-men" autocomplete="off"><span>Men Pro</span></label>
+                <label class="chip"><input type="radio" name="cat" value="dbl-pro-women" autocomplete="off"><span>Women Pro</span></label>
               </div>
             </div>
             <p class="cat-note" id="catNote"></p>
@@ -684,24 +620,8 @@
         <div class="steps3">
           <div class="step"><span class="n">1</span><h3>Find your peers</h3><p>We look up how athletes (or teams) in your division who finish in about your time typically split their race: every run, every station and Roxzone. The comparison slides with your exact time, so a 61-minute and an 89-minute racer are never measured against the same benchmark.</p></div>
           <div class="step"><span class="n">2</span><h3>Compare every split</h3><p>Each split is set against that typical split, in seconds, and against how spread out your peers are. Ratings follow where you sit among them: the middle half is the "normal range"; the slowest quarter is "time to gain" (the slowest tenth a "big opportunity"); the fastest quarter is a "strength" (the fastest tenth a "big strength").</p></div>
-          <div class="step"><span class="n">3</span><h3>Rank the time</h3><p>Your biggest gaps are ranked in seconds, and your goal plan shows where the time to your next milestone usually comes from, using how athletes at that goal split their race.</p></div>
+          <div class="step"><span class="n">3</span><h3>Plan the time</h3><p>Your splits are lined up from your biggest gap to your biggest strength, and your goal plan shows where the time to your next milestone usually comes from, using how athletes at that goal split their race.</p></div>
         </div>
-        <details>
-          <summary>Where the benchmarks come from</summary>
-          <div class="db" id="sourcesBox">
-            <p>Koda built the benchmarks mostly from published summary statistics of recent HYROX results; the page itself holds no individual racer's results. Singles: 2025/26 split medians by finish time, covering about 325,000 finishes. Doubles: team split averages by finish time from Hyranking (which pools seasons without stating them), checked against medians from about 685,000 team finishes (2024/25 to 2026/27); a few doubles values at the fastest and slowest finish times were adjusted using team results listed on RoxTimes event pages. For each division we keep the typical time on each run, station and Roxzone across most of its field (from about 50–60 minutes up to 2–2½ hours, depending on the division), and how much racers who finish in the same time differ on each part (for doubles, estimated from singles racers at the same place in their field). Weights, distances and rules follow the official HYROX rulebooks.</p>
-            <ul>
-              <li><a href="https://hyrox.com/the-fitness-race/" target="_blank" rel="noopener">HYROX</a>: rulebooks for the 2025/26 and 2026/27 seasons (weights, distances, doubles rules).</li>
-              <li><a href="https://athlete.tools/" target="_blank" rel="noopener">athlete.tools</a>: 2025/26 singles splits by finish time, how much same-finish racers differ, and finish-time percentiles.</li>
-              <li><a href="https://github.com/pythongod/rox-pace" target="_blank" rel="noopener">rox-pace</a> (MIT licence): finish-time percentiles for every division and doubles lap-by-lap medians, 2024/25 to 2026/27.</li>
-              <li><a href="https://hyranking.com/" target="_blank" rel="noopener">Hyranking</a>: doubles splits by finish time (seasons pooled, not stated).</li>
-              <li><a href="https://www.roxtimes.com/benchmarks" target="_blank" rel="noopener">RoxTimes</a>: doubles medians and event results, used to check and adjust the doubles tables and to split running from Roxzone (CC BY-NC 4.0, adapted by Koda).</li>
-              <li><a href="https://github.com/TanviJivani/next-five" target="_blank" rel="noopener">Next Five</a>: next-race gains by level from repeat racers, used for the suggested goal.</li>
-              <li>Research: Rappelt et al., <a href="https://www.frontiersin.org/journals/physiology/articles/10.3389/fphys.2026.1847569/full" target="_blank" rel="noopener">Frontiers in Physiology</a> (2026); Yamanoi, <a href="https://zenodo.org/records/18683662" target="_blank" rel="noopener">Winning Strategies in HYROX</a> (2026, preprint).</li>
-            </ul>
-            <p>Benchmarks last updated November 2026. They are Koda's estimates, not official HYROX figures, and Koda plans to refresh them each season. Koda is an official HYROX affiliate gym, but this analyzer is Koda's own tool: it isn't made, endorsed or checked by HYROX.</p>
-          </div>
-        </details>
         <details>
           <summary>Good to know</summary>
           <div class="db">
@@ -709,7 +629,7 @@
               <li><b>Venues differ.</b> Sled floors, run laps and timing-mat placement usually move a single split by 20–60 seconds, but at some venues (for example Berlin and London ExCeL) several minutes shift between running and Roxzone or stations, and some venues run Run 8 a minute or more long. Most US venues also log a slightly bigger share of the race as running. If your running looks slow and your Roxzone or stations fast (or the reverse), judge them together. Sleds and Roxzone get extra leeway in the ratings for this reason.</li>
               <li><b>Run 1 isn't compared.</b> The start lap is shorter or longer at many venues, so running is judged on Runs&nbsp;2–&#8288;8 and you're matched with racers whose other splits add up like yours.</li>
               <li><b>Altitude.</b> The benchmarks come mostly from races near sea level. Racing at around 1,600 m (5,300 ft), as at HYROX Denver, usually costs a little time on the runs and ergs and barely touches the strength stations.</li>
-              <li><b>Doubles.</b> Your splits are the team's, so the analysis is about the team, not each partner. Partners must run every kilometre together. Team-to-team spreads aren't published, so for doubles the "faster/slower than X% of teams" figures and the ratings are Koda's estimates borrowed from singles racers at the same place in their field, and the km-by-km typical line is the average doubles lap pattern adjusted for finish time.</li>
+              <li><b>Doubles.</b> Your splits are the team's, so the analysis is about the team, not each partner. Partners must run every kilometre together. Team-to-team spreads aren't published, so for doubles the ratings (and the "faster/slower than X% of teams" figure you see when you tap or hover over a bar) are Koda's estimates borrowed from singles racers at the same place in their field.</li>
               <li><b>Sims.</b> A gym simulation uses different sleds, floors and run loops and doesn't time Roxzone the same way, so treat sled, run and Roxzone comparisons from a sim as a rough guide.</li>
               <li><b>Penalties.</b> Official times include penalties; splits don't. If your official time is more than about 15 seconds above what your splits add up to, a penalty is the usual reason (most are 15 seconds to 2 minutes; a missed run lap costs 3–7 minutes), and the goal plan shows it as its own line. If you leave Roxzone blank, it's worked out from your overall time, so any penalty is counted as Roxzone.</li>
               <li><b>It's a comparison, not a verdict.</b> "Typical" is how athletes who finish where you do usually split their race (it adds up to your finish), so it can sit a little off the exact middle of each split. One race is a snapshot, and all ages are pooled.</li>
@@ -745,14 +665,14 @@
           </ul>
         </div>
       </div>
-      <p class="foot-legal">© 2026 Koda Colorado LLC, doing business as Koda CrossFit Iron View. Koda is an official HYROX affiliate gym, but this split analyzer is Koda's own tool: it isn't made, endorsed or checked by HYROX. HYROX is a registered trademark of its owner. Benchmarks are Koda's estimates from third-party race statistics, not official HYROX figures. <a href="https://koda-crossfit.github.io/legal/privacy.html">Privacy</a> · <a href="https://koda-crossfit.github.io/legal/terms.html">Terms</a></p>
+      <p class="foot-legal">© 2026 Koda Colorado LLC, doing business as Koda CrossFit Iron View. Koda is an official HYROX affiliate gym, but this split analyzer is Koda's own tool: it isn't made, endorsed or checked by HYROX. HYROX is a registered trademark of its owner. Benchmarks are Koda's estimates from third-party race statistics, not official HYROX figures. Data credits: <a href="https://athlete.tools/" target="_blank" rel="noopener">athlete.tools</a>, <a href="https://hyranking.com/" target="_blank" rel="noopener">Hyranking</a>, <a href="https://github.com/pythongod/rox-pace" target="_blank" rel="noopener">rox-pace</a> (MIT licence), <a href="https://www.roxtimes.com/benchmarks" target="_blank" rel="noopener">RoxTimes</a> (<a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>, adapted by Koda) and <a href="https://github.com/TanviJivani/next-five" target="_blank" rel="noopener">Next Five</a>. <a href="https://koda-crossfit.github.io/legal/privacy.html">Privacy</a> · <a href="https://koda-crossfit.github.io/legal/terms.html">Terms</a></p>
     </div>
   </footer>
 
   <div class="tip" id="tip" role="tooltip"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="benchmarks.js?v=5"></script>
-  <script src="app.js?v=5"></script>
+  <script src="benchmarks.js?v=6"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
