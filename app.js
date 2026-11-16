@@ -98,6 +98,7 @@
   // ───────────────────────── Utilities ─────────────────────────
   const sum = a => a.reduce((x, y) => x + y, 0);
   const mean = a => sum(a) / a.length;
+  const median = a => { const s = a.slice().sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
   const pad = n => String(n).padStart(2, '0');
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -349,11 +350,12 @@
     // Fade: runs 5-7 vs runs 2-4 (Run 1 and Run 8 lengths vary by venue).
     const fade = mean(runs.slice(4, 7)) - mean(runs.slice(1, 4));
     const typFade = own * (mean(prof.slice(4, 7)) - mean(prof.slice(1, 4)));
+    const slowAfter = outside ? [] : slowRunsAfter(catKey, Tp, runs, prof);
 
     const pct = pctFaster(catKey, official);
     const res = {
       catKey, cat, v, official, T, Tp, rox, roxInferred, penalty, runTotal, run28, stTotal, E, exp,
-      items, parts, leaks, onTable, projected: official - penalty - onTable, runs, runRows, avg: runTotal / 8, avg28, expAvg28, fade, typFade, prof,
+      items, parts, slowAfter, leaks, onTable, projected: official - penalty - onTable, runs, runRows, avg: runTotal / 8, avg28, expAvg28, fade, typFade, prof,
       run1Gap: runs[0] - expRuns[0], pct, conf: outside ? 'x' : confidenceAt(catKey, Tp), outside,
     };
     // Goals are set from your clean time: with a penalty, from what your splits add up to.
@@ -364,6 +366,46 @@
     res.goal = goalOk ? goalSec : suggestGoal(catKey, res.goalBase);
     res.plan = planGoal(res, res.goal);
     return res;
+  }
+
+  // A station that slowed the run after it: one of Runs 2-7 much slower than your own trend, after
+  // allowing for how racers at your time usually slow on each lap (the typical lap shape). The station
+  // before it probably sent your heart rate too high.
+  //  - Trend: a robust (Theil-Sen) line through all 8 runs' shape-adjusted log paces, so one odd lap,
+  //    a steady fade or a negative split can't push it around. Runs 1 and 8 help place the line but are
+  //    never flagged (start-lap and last-lap lengths vary by venue). A lap far faster than your middle
+  //    lap (a missed or short lap) is left out of the line.
+  //  - Flag: at least SLOW_Z lap-to-lap spreads and SLOW_MIN seconds above the line, and SLOW_MIN
+  //    seconds slower than your middle lap among Runs 2-7. sigma = per-run spread x sqrt(1 - 0.6): the
+  //    research puts one run's spread among same-finish racers near 0.09-0.10 with runs correlating
+  //    ~0.6, venue lap lengths included. Simulated at that sigma (Run 1 2.5x, Run 8 1.3x noisier):
+  //    about 1 race in 8 shows a flag by chance alone; missed laps, fast starts, steady fades and
+  //    negative splits stay near that rate. At most two, biggest first, from the same line.
+  //  - A drop of 2+ min or 40%+ of a lap is too big for a hard station: it's shown as "check this
+  //    split" (typo, extra lap, a stop) instead of being blamed on the station.
+  const SLOW_Z = 2, SLOW_MIN = 15;
+  function slowRunsAfter(catKey, T, runs, prof) {
+    const sig = (spreadAt(catKey, 'run', T)[1] / 0.81) * Math.sqrt(0.4);   // one lap around your own pace
+    const y = runs.map((r, i) => Math.log(r / prof[i]));
+    const mid = median(y.slice(1, 7));
+    const use = y.map((v, k) => v - mid > -2.5 * sig * (k === 0 || k === 7 ? 2.5 : 1));
+    const xs = [], ys = [];
+    y.forEach((v, k) => { if (use[k]) { xs.push(k); ys.push(v); } });
+    const sl = [];
+    for (let i = 0; i < xs.length; i++) for (let j = i + 1; j < xs.length; j++) sl.push((ys[j] - ys[i]) / (xs[j] - xs[i]));
+    if (sl.length < 3) return [];
+    const b = median(sl), a = median(ys.map((v, i) => v - b * xs[i]));
+    const out = [];
+    for (let k = 1; k <= 6; k++) {
+      const line = a + b * k, expected = Math.exp(line) * prof[k], extra = runs[k] - expected;
+      const others = y.filter((_, j) => j >= 1 && j <= 6 && j !== k && use[j]);
+      const middle = others.length ? Math.exp(median(others)) * prof[k] : Infinity;   // your middle lap, at this lap's shape
+      const z = (y[k] - line) / sig;
+      if (z >= SLOW_Z && extra >= SLOW_MIN && runs[k] - middle >= SLOW_MIN) {
+        out.push({ run: k + 1, station: ST_IDS[k - 1], actual: runs[k], expected, extra, z, odd: extra >= Math.max(120, 0.4 * expected) });
+      }
+    }
+    return out.sort((p, q) => q.extra - p.extra).slice(0, 2);
   }
 
   // Next-race gains by level (share of finish time, typical / upper quartile), from repeat racers.
@@ -602,7 +644,7 @@
     // No division of this type picked yet: ask for one. A report on screen stays until one is picked.
     $$('input[name="cat"]').forEach(r => { r.checked = false; });
     state.cat = null;
-    $('#catNote').textContent = 'Pick your ' + kind + ' division: ' + (kind === 'doubles' ? 'Men, Women, Mixed, Men Pro or Women Pro.' : 'Men Open, Women Open, Men Pro or Women Pro.');
+    $('#catNote').textContent = 'Pick your ' + kind + ' division: ' + (kind === 'doubles' ? 'Men Open, Women Open, Mixed, Men Pro or Women Pro.' : 'Men Open, Women Open, Men Pro or Women Pro.');
     $('#catNote').classList.add('ask');
     refreshTotals();
   }
@@ -1125,10 +1167,12 @@
     h += '<div class="panel keep"><div class="panel-h"><h3>Strengths &amp; weak spots</h3></div>' +
       '<div class="r-tags"><span class="y">' + esc(cat.label) + '</span><span>' + esc(fmt(res.official)) + ' finish</span></div>' +
       '<p class="panel-sub">Compared with <b>' + esc(cat.who) + ' who finish in about ' + esc(fmt(pt)) + '</b>' + (why.length ? ' (your time ' + why.join(' and ') + ')' : '') + '. Each bar is how far your split is from the typical split at that time, and the label under each name says where you sit among them. Running and Roxzone are judged together as <b>Run + Roxzone</b>, because venues split time between them differently; that bar is per km of Runs 2–8, transitions included (Run 1\'s length varies by venue). Tap or hover over a bar to see your time, the typical time and where you rank.</p>' +
-      '<div class="panel-b"><div class="dv-top"><div class="dv-legend"><span><i class="sw-gain"></i>Slower than typical</span><span><i class="sw-strong"></i>Faster than typical</span></div>' +
+      '<div class="panel-b"><div class="dv-top"><div class="dv-legend"><span><i class="sw-gain"></i>Slower than typical</span><span><i class="sw-strong"></i>Faster than typical</span>' +
+      (res.slowAfter.some(f => !f.odd) ? '<span><i class="sw-flag"></i>Slowed your next run</span>' : '') + '</div>' +
       '<div class="seg-toggle" role="group" aria-label="Sort the bars"><button type="button" data-sort="gap" aria-pressed="true">Biggest gap</button><button type="button" data-sort="race" aria-pressed="false">Race order</button></div></div>' +
       '<div class="dv" id="dvChart"></div>' +
       '<div class="dv-axis" aria-hidden="true"><span></span><div><span>◀ Faster</span><span>Typical</span><span>Slower ▶</span></div><span></span></div>' +
+      res.slowAfter.map(f => slowCallout(f, cat)).join('') +
       (notes.length ? '<div class="dv-notes"><p>' + esc(notes.join(' ')) + '</p></div>' : '') +
       '</div></div>';
 
@@ -1160,19 +1204,43 @@
       const w = Math.min(50, (Math.abs(d) / maxAbs) * 50);
       const cls = d >= 0 ? 'gain' : 'strong';
       const you = isRun ? Math.round(i.actual / 7) : i.actual, typ = you - dR, per = isRun ? '/km' : '';
-      const note = i.rating.text + '. ' + peerLine(i, res.cat) + (isRun ? ' ' + runRoxNote(res, Math.round(i.d)) : '');
+      const slow = res.slowAfter.find(f => f.station === i.key && !f.odd);   // this station slowed the run after it
+      const slowTxt = slow ? ' It slowed your next run: Run ' + slow.run + ' (' + fmt(slow.actual) + ') was ' + fmt(slow.extra) + ' slower than your other runs suggest.' : '';
+      const note = i.rating.text + '. ' + peerLine(i, res.cat) + (isRun ? ' ' + runRoxNote(res, Math.round(i.d)) : '') + slowTxt;
       const rows = [['You', fmt(you) + per], ['Typical', fmt(typ) + per], ['Difference', fmtDelta(dR) + per]];
       if (isRun) rows.push(['In all', fmtDelta(i.d)]);
       const tip = tipAttr(isRun ? 'Run + Roxzone · per km of Runs 2–8' : i.label, rows, note);
       const aria = (isRun
         ? 'Run plus Roxzone, per kilometre of Runs 2 to 8 with transitions: you ' + fmt(you) + ' per km, typical ' + fmt(typ) + ' per km, ' + deltaWords(dR) + ' per km, ' + deltaWords(i.d) + ' in all'
         : i.label + ': you ' + fmt(you) + ', typical ' + fmt(typ) + ', ' + deltaWords(dR)) + '. ' + note;
-      return '<div class="dv-row" role="group" tabindex="0"' + tip + ' aria-label="' + esc(aria) + '">' +
+      return '<div class="dv-row' + (slow ? ' flag' : '') + '" role="group" tabindex="0"' + tip + ' aria-label="' + esc(aria) + '">' +
         '<div class="dv-name"><b>' + nameHTML(i.key) + '</b><small>' + esc(i.rating.text) + '</small>' +
-        (isRun ? '<small class="dv-tot">' + esc(fmtDelta(i.d)) + ' in all</small>' : '') + '</div>' +
+        (isRun ? '<small class="dv-tot">' + esc(fmtDelta(i.d)) + ' in all</small>' : '') +
+        (slow ? '<small class="dv-flagcap">Slowed Run ' + slow.run + ' <span class="nw">by ' + esc(fmt(slow.extra)) + '</span></small>' : '') + '</div>' +
         '<div class="dv-track"><span class="dv-bar ' + cls + '" style="width:' + w.toFixed(2) + '%"></span></div>' +
         '<div class="dv-val">' + fmtDelta(dR) + (isRun ? '<small>per km</small>' : '') + '</div></div>';
     }).join('');
+  }
+  // The call-out under the chart for a station that slowed the run after it.
+  const STATION_THE = { ski: 'the SkiErg', push: 'the sled push', pull: 'the sled pull', bbj: 'the burpee broad jumps', row: 'the row', farm: 'the farmers carry' };
+  const SLOW_TIP = {
+    ski: 'Ease off the SkiErg a little so you can settle straight into your running pace.',
+    push: 'Push at a pace your legs and breathing come back from quickly, and practise running straight off a heavy push.',
+    pull: 'Pull at a pace your grip, back and breathing come back from quickly, and practise running straight off the sled.',
+    bbj: 'Find a burpee broad jump rhythm you can hold without spiking your heart rate, and practise running straight off them.',
+    row: 'Hold a row split you can sustain, ease the last 100 m, and practise running straight off the rower.',
+    farm: 'Carry at a pace that keeps your breathing under control, and practise running straight off the carry.',
+  };
+  function slowCallout(f, cat) {
+    const icon = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3.5 2.6 20h18.8z"/><path d="M12 10v4.4M12 17.3v.2"/></svg>';
+    const times = 'Run ' + f.run + ' (' + esc(fmt(f.actual)) + ')';
+    if (f.odd) {
+      // Too big for a hard station: more likely a typo, an extra lap or a stop.
+      return '<div class="dv-flag" role="note">' + icon + '<div><b class="h">Check your Run ' + f.run + ' time</b>' +
+        '<p>' + times + ' was <b>' + esc(fmt(f.extra)) + ' slower</b> than your other runs suggest (about ' + esc(fmt(f.expected)) + '), far more than a hard station usually costs. Check that split for a typo; if it\'s right, something else happened on that lap, like an extra lap or a stop.</p></div></div>';
+    }
+    return '<div class="dv-flag" role="note">' + icon + '<div><b class="h">' + esc(META[f.station].name) + ' slowed your next run</b>' +
+      '<p>' + times + ', right after it, was <b>' + esc(fmt(f.extra)) + ' slower</b> than your other runs suggest (about ' + esc(fmt(f.expected)) + '), a bigger drop than most ' + esc(cat.unit) + ' at your time have there. That usually means ' + STATION_THE[f.station] + ' sent your heart rate too high. ' + esc(SLOW_TIP[f.station]) + '</p></div></div>';
   }
   // Why running and Roxzone share one bar, with the two halves for context. The halves are
   // rounded from the row's own total, so they add up to the "In all" figure shown with them.

@@ -44,6 +44,7 @@
       --gain: #FFFF33;      /* time to gain (slower than typical) */
       --strong: #3987E5;    /* ahead of typical (faster) */
       --strong-text: #8DBDF5;
+      --alert: #FF6B6B;     /* a station that slowed the run after it (always with a label) */
       --typical: #8C857B;   /* the "typical" reference line */
       --display: 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       --mono: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -111,26 +112,31 @@
     .btn-text { background: none; border: 0; padding: 8px 4px; font-weight: 600; font-size: 0.9rem; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; color: inherit; }
 
     /* ── Hero ── */
-    .hero { position: relative; color: #fff; padding: 64px 0 78px; overflow: hidden; background: radial-gradient(900px 480px at 85% 30%, rgba(255,255,51,0.07), transparent 60%), var(--ink); }
+    /* landscape: the headline on the left, what it does + the button + quick facts on the right */
+    .hero { position: relative; color: #fff; padding: 40px 0 44px; overflow: hidden; background: radial-gradient(900px 420px at 85% 30%, rgba(255,255,51,0.07), transparent 60%), var(--ink); }
     .hero-bgword {
-      position: absolute; right: -2vw; bottom: -0.12em; font-family: var(--display); font-weight: 900;
-      font-size: clamp(8rem, 26vw, 22rem); line-height: 0.8; letter-spacing: -0.05em;
+      position: absolute; right: -2vw; bottom: -0.14em; font-family: var(--display); font-weight: 900;
+      font-size: clamp(7rem, 19vw, 16rem); line-height: 0.8; letter-spacing: -0.05em;
       color: transparent; -webkit-text-stroke: 1px rgba(223,213,195,0.09); pointer-events: none; user-select: none;
     }
-    .hero-grid { position: relative; }
-    .hero-grid > div { max-width: 760px; }
-    .hero .eyebrow { color: var(--sand-2); margin-bottom: 18px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+    .hero-grid { position: relative; display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); gap: 18px 56px; align-items: center; }
+    .hero .eyebrow { color: var(--sand-2); margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
     .hero .eyebrow .tag { background: var(--yellow); color: var(--ink); padding: 3px 8px 2px; }
-    h1.hero-title { font-family: var(--display); font-weight: 900; font-size: clamp(3rem, 8.4vw, 6.2rem); line-height: 0.9; letter-spacing: -0.035em; text-transform: uppercase; margin-bottom: 24px; }
+    h1.hero-title { font-family: var(--display); font-weight: 900; font-size: clamp(2.7rem, 5.6vw, 4.7rem); line-height: 0.9; letter-spacing: -0.035em; text-transform: uppercase; }
     h1.hero-title .hl { display: inline-block; padding: 0.02em 0.12em 0 0.06em; margin-left: -0.06em; }
-    .hero-sub { max-width: 560px; color: var(--sand); font-size: 1.1rem; line-height: 1.65; margin-bottom: 28px; }
+    .hero-body { padding-left: 28px; border-left: 1px solid var(--line-dark-2); }
+    .hero-sub { max-width: 520px; color: var(--sand); font-size: 1.05rem; line-height: 1.6; margin-bottom: 20px; }
     .hero-sub strong { color: #fff; }
-    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin-bottom: 34px; }
-    .hero-facts { display: flex; flex-wrap: wrap; gap: 12px 30px; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; margin-bottom: 22px; }
+    .hero-facts { display: flex; flex-wrap: wrap; gap: 10px 24px; }
     .fact .mono { display: block; color: var(--muted-dark); font-size: 0.68rem; margin-bottom: 2px; }
-    .fact strong { display: block; font-size: 0.98rem; font-weight: 600; color: #fff; white-space: nowrap; }
+    .fact strong { display: block; font-size: 0.93rem; font-weight: 600; color: #fff; white-space: nowrap; }
 
-    @media (max-width: 900px) { .hero { padding: 46px 0 56px; } }
+    @media (max-width: 900px) {
+      .hero { padding: 32px 0 36px; }
+      .hero-grid { grid-template-columns: minmax(0, 1fr); }
+      .hero-body { padding-left: 0; border-left: 0; }
+    }
     @media (max-width: 480px) {
       .wrap { padding: 0 16px; }
       .hero-sub { font-size: 1rem; }
@@ -351,6 +357,17 @@
     /* running is drawn per km: its caption says so, and the name block carries the whole gap */
     .dv-val small { display: block; font-family: var(--mono); font-weight: 500; font-size: 0.62rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted-dark-2); line-height: 1.3; }
     .dv-name small.dv-tot { color: var(--sand-3); }
+    /* a station that slowed the run after it: red box, red label, and a call-out under the chart */
+    .dv-row.flag { outline: 2px solid var(--alert); outline-offset: 3px; border-radius: 3px; margin: 12px 0; }   /* room so two boxes (or a neighbour's focus ring) never overlap */
+    .dv-row.flag:focus-visible { outline-color: var(--yellow); }
+    .dv-name small.dv-flagcap { color: var(--alert); }
+    .dv-legend i.sw-flag { background: transparent; border: 2px solid var(--alert); box-sizing: border-box; }
+    .dv-flag { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; align-items: start; margin-top: 18px; padding: 14px 16px; border: 1px solid rgba(255,107,107,0.55); border-left: 4px solid var(--alert); background: rgba(255,107,107,0.07); }
+    .dv-flag svg { width: 22px; height: 22px; color: var(--alert); margin-top: 1px; }
+    .dv-flag .h { display: block; font-family: var(--display); font-weight: 800; font-size: 1.02rem; letter-spacing: 0.005em; text-transform: uppercase; color: #fff; margin-bottom: 4px; }
+    .dv-flag p { color: var(--sand); font-size: 0.92rem; line-height: 1.55; }
+    .dv-flag p b { color: #fff; font-weight: 600; }
+    @media (max-width: 560px) { .dv-flag { padding: 12px; gap: 10px; } }
     .dv-notes { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-dark); }
     .dv-notes p { color: var(--muted-dark); font-size: 0.86rem; line-height: 1.55; max-width: 760px; }
     .dv-axis { display: grid; grid-template-columns: minmax(120px, 190px) minmax(0, 1fr) 66px; gap: 14px; margin-top: 8px; }
@@ -452,6 +469,11 @@
       :root { --gain: #C8B900; --strong: #1F6FD1; --typical: #888; --line-dark: #ddd; --line-dark-2: #bbb; }
       .goal-top { display: none; }
       #goalPanel { break-inside: avoid; }   /* start the goal plan on a fresh page rather than strand its heading */
+      .report .dv-row.flag { outline-color: #C62828; }
+      .report .dv-name small.dv-flagcap, .report .dv-name small.dv-flagcap *, .report .dv-flag svg, .report .dv-flag svg * { color: #C62828 !important; }
+      .panel.keep:has(.dv-flag) { break-inside: auto; }   /* with call-outs the panel is taller than a page: let it flow */
+      .report .dv-flag { background: #fff !important; border-color: #C62828 !important; break-inside: avoid; }
+      .report .dv-legend i.sw-flag { border-color: #C62828; }
       /* the screen-reader title becomes the printout's title */
       #reportTitle { position: static; width: auto; height: auto; margin: 0 0 12px; clip: auto; overflow: visible; white-space: normal; font-family: var(--display); font-weight: 800; font-size: 1.3rem; text-transform: uppercase; }
       .print-only { display: block !important; margin-top: 14px; font-weight: 600; font-size: 0.9rem; }
@@ -478,16 +500,18 @@
     <section class="hero" aria-labelledby="heroTitle">
       <div class="hero-bgword" aria-hidden="true">KODA</div>
       <div class="wrap hero-grid">
-        <div>
+        <div class="hero-head">
           <span class="eyebrow mono"><span class="tag">Free tool</span> Koda Split Analyzer · for HYROX races</span>
           <h1 class="hero-title" id="heroTitle">Where's your <span class="hl">time</span> hiding?</h1>
+        </div>
+        <div class="hero-body">
           <p class="hero-sub">Enter your HYROX race splits and see which stations, Roxzone and running are costing you the most, <strong>measured against athletes who finish where you do</strong>. Then see where your next PR is most likely to come from.</p>
           <div class="hero-actions">
             <a class="btn btn-yellow" href="#analyze">Analyze my race <span class="arr">→</span></a>
           </div>
           <div class="hero-facts">
             <div class="fact"><span class="mono">Divisions</span><strong>Open, Pro &amp; Doubles</strong></div>
-            <div class="fact"><span class="mono">Fill it in</span><strong>Screenshot, paste or type</strong></div>
+            <div class="fact"><span class="mono">Fill it in</span><strong>Screenshot or type</strong></div>
             <div class="fact"><span class="mono">Cost</span><strong>Free, no sign-up</strong></div>
           </div>
         </div>
@@ -526,8 +550,8 @@
             <div class="cat-pick" data-kind="doubles" hidden>
               <span class="lbl" id="lblDoubles">Your doubles division</span>
               <div class="chips" role="radiogroup" aria-labelledby="lblDoubles">
-                <label class="chip"><input type="radio" name="cat" value="dbl-men" autocomplete="off"><span>Men</span></label>
-                <label class="chip"><input type="radio" name="cat" value="dbl-women" autocomplete="off"><span>Women</span></label>
+                <label class="chip"><input type="radio" name="cat" value="dbl-men" autocomplete="off"><span>Men Open</span></label>
+                <label class="chip"><input type="radio" name="cat" value="dbl-women" autocomplete="off"><span>Women Open</span></label>
                 <label class="chip"><input type="radio" name="cat" value="dbl-mixed" autocomplete="off"><span>Mixed</span></label>
                 <label class="chip"><input type="radio" name="cat" value="dbl-pro-men" autocomplete="off"><span>Men Pro</span></label>
                 <label class="chip"><input type="radio" name="cat" value="dbl-pro-women" autocomplete="off"><span>Women Pro</span></label>
@@ -627,6 +651,7 @@
           <div class="db">
             <ul>
               <li><b>Venues differ.</b> Sled floors, run laps and timing-mat placement usually move a single split by 20–60 seconds, but at some venues (for example Berlin and London ExCeL) several minutes shift between running and Roxzone or stations, and some venues run Run 8 a minute or more long. Most US venues also log a bigger share of the race as running and less as Roxzone. That's why running and Roxzone are judged together as one, <b>Run + Roxzone</b>, and why sleds get extra leeway in the ratings. If your stations look slow and your Run + Roxzone fast (or the reverse), the venue may be part of it, so read them together.</li>
+              <li><b>A slow run after a station.</b> When one of Runs&nbsp;2–&#8288;7 is much slower than your other runs suggest, after allowing for how much racers at your time usually slow on that lap, the station before it gets a red box: it probably sent your heart rate too high. Only a clear drop counts, since laps always vary a little (slower racers' laps vary more, so the bar is higher for them). Run&nbsp;1 follows the start and venues often make Run&nbsp;8 longer, so those two are never flagged. A drop of 2 minutes or more is shown as "check this split" instead, since it's more likely a typo, an extra lap or a stop.</li>
               <li><b>Run 1 isn't compared.</b> The start lap is shorter or longer at many venues, so Run + Roxzone is judged on Runs&nbsp;2–&#8288;8 plus every transition, and you're matched with racers whose other splits add up like yours.</li>
               <li><b>Altitude.</b> The benchmarks come mostly from races near sea level. Racing at around 1,600 m (5,300 ft), as at HYROX Denver, usually costs a little time on the runs and ergs and barely touches the strength stations.</li>
               <li><b>Doubles.</b> Your splits are the team's, so the analysis is about the team, not each partner. Partners must run every kilometre together. Team-to-team spreads aren't published, so for doubles the ratings (and the "faster/slower than X% of teams" figure you see when you tap or hover over a bar) are Koda's estimates borrowed from singles racers at the same place in their field.</li>
@@ -672,7 +697,7 @@
   <div class="tip" id="tip" role="tooltip"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="benchmarks.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="benchmarks.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

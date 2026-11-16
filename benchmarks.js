@@ -206,9 +206,9 @@ window.KODA_BENCH = {
       finish: [[1,3768],[10,4239],[25,4636],[50,5213],[75,5921],[90,6719],[95,7324],[99,8781]],
     },
     "dbl-men": {
-      label: "Men's Doubles",
-      chip: "Men",
-      who: "men's Doubles teams",
+      label: "Men's Open Doubles",
+      chip: "Men Open",
+      who: "men's Open Doubles teams",
       group: "doubles",
       unit: "teams",
       anchors: [
@@ -232,9 +232,9 @@ window.KODA_BENCH = {
       finish: [[1,3440],[5,3698],[10,3874],[25,4205],[50,4630],[75,5148],[90,5725],[95,6134],[99,7063]],
     },
     "dbl-women": {
-      label: "Women's Doubles",
-      chip: "Women",
-      who: "women's Doubles teams",
+      label: "Women's Open Doubles",
+      chip: "Women Open",
+      who: "women's Open Doubles teams",
       group: "doubles",
       unit: "teams",
       anchors: [
