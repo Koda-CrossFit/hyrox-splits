@@ -7,9 +7,9 @@ const puppeteer = require(process.env.PUPPETEER_MODULE || 'puppeteer');
 const ROOT = path.resolve(__dirname, '..');
 const mark = 'data:image/png;base64,' + fs.readFileSync(path.join(ROOT, 'assets/koda-mark.png')).toString('base64');
 
-// The Men's Open "Try an example" race as the strengths chart draws it (running per km), one scale
-// for every bar: zero line at 34%, width = 0.6875% per second.
-const rows = [['Wall Balls', 66, 'g', '+1:36'], ['Roxzone', 33.7, 'g', '+0:49'], ['Sled Push', 27.5, 'g', '+0:40'], ['Row', 9.6, 's', '−0:14'], ['Burpee BJ', 14.4, 's', '−0:21'], ['Run / km', 16.5, 's', '−0:24']];
+// The Men's Open "Try an example" race as the strengths chart draws it (Run + Roxzone per km), one
+// scale for every bar: zero line at 34%, width = 0.6875% per second.
+const rows = [['Wall Balls', 66, 'g', '+1:36'], ['Sled Push', 27.5, 'g', '+0:40'], ['Lunges', 9.6, 'g', '+0:14'], ['Row', 9.6, 's', '−0:14'], ['Run+Rox /km', 11.7, 's', '−0:17'], ['Burpee BJ', 14.4, 's', '−0:21']];
 const html = `<!doctype html><html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@500&family=Inter+Tight:wght@800;900&family=Inter:wght@600&display=swap" rel="stylesheet">
 <style>
@@ -30,7 +30,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8">
   .card .lab { font-family: 'DM Mono', monospace; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; color: #E5DDCF; }
   .card .fin { font-weight: 800; font-size: 30px; letter-spacing: -0.015em; line-height: 1.1; margin: 8px 0 18px; }
   .card .fin span { color: #FFFF33; }
-  .r { display: grid; grid-template-columns: 108px 1fr 60px; gap: 10px; align-items: center; padding: 7px 0; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 18px; }
+  .r { display: grid; grid-template-columns: 120px 1fr 60px; gap: 10px; align-items: center; padding: 7px 0; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 18px; }
   .r b { text-align: right; font-weight: 600; }
   .t { position: relative; height: 14px; }
   .t::before { content: ''; position: absolute; left: 34%; top: -6px; bottom: -6px; width: 1px; background: rgba(223,213,195,0.3); }

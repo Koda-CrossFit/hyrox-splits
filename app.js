@@ -17,11 +17,17 @@
   const RUN_IDS = ['run1', 'run2', 'run3', 'run4', 'run5', 'run6', 'run7', 'run8'];
   const ST_IDS = ['ski', 'push', 'pull', 'bbj', 'row', 'farm', 'lunge', 'wb'];
   const ALL_IDS = ORDER.concat(['rox', 'overall']);
-  const BLOCKS = ['run', 'ski', 'push', 'pull', 'bbj', 'row', 'farm', 'lunge', 'wb', 'rox'];
+  // What gets compared: running and Roxzone as one pair (runrox), then the 8 stations.
+  const BLOCKS = ['runrox', 'ski', 'push', 'pull', 'bbj', 'row', 'farm', 'lunge', 'wb'];
 
   // tip: singles coaching note; dtip: the doubles version.
   // name: as listed in the report; label: running carries its scope (Runs 2-8) wherever it's compared.
   const META = {
+    // Running and Roxzone are judged together: venues split time between them differently (where the
+    // timing mats sit, how the laps run), so apart they mislead, e.g. slow running + fast Roxzone.
+    runrox: { name: 'Run + Roxzone', spec: 'Runs 2–8 + transitions',
+      tip: 'Running and transitions together are most of your race. Build your aerobic base, practise running straight off the stations, jog every transition and know each station before you reach it.',
+      dtip: 'Running and transitions together are most of your race. You run every kilometre together, so pace to the slower partner, jog every transition together and agree who starts each station before you get there.' },
     run: { name: 'Running', label: 'Running (Runs 2–⁠8)', short: 'Runs 2–⁠8', spec: 'Runs 2–⁠8',
       tip: 'Running is the biggest single share of the time between finish levels (about 40–45% in Open, a little less in Pro). Build your aerobic base, practise running straight off the stations, and take Runs 1–⁠2 a little easier than feels right.',
       dtip: 'Running is the biggest gap between doubles teams. You run every kilometre together, so pace to the slower partner and give the stronger runner more of the station work.' },
@@ -259,13 +265,21 @@
   // Doubles borrow the matching singles spreads at the same place in their own field.
   const SD_FLOOR = { ski: 0.04, row: 0.04, run: 0.06, rox: 0.15 };
   const VENUE_WIDEN = { push: 1.25, pull: 1.25, rox: 1.25 }; // sled floors and Roxzone layouts vary by venue
-  function spreadAt(catKey, key, T) {
+  function spreadAt(catKey, key, T, noWiden) {
     let cat = B.categories[catKey], Ts = T;
     if (cat.spreadFrom) { Ts = finishAtPct(cat.spreadFrom, pctFaster(catKey, T)); cat = B.categories[cat.spreadFrom]; }
     const S = cat.spread, m = Ts / 60;
     const pts = j => S.at.map((c, i) => [c, S[key][i][j]]);
-    const w = VENUE_WIDEN[key] || 1, f = SD_FLOOR[key] || 0.05;
+    const w = noWiden ? 1 : VENUE_WIDEN[key] || 1, f = SD_FLOOR[key] || 0.05;
     return [Math.max(interp(pts(0), m), f) * w, Math.max(interp(pts(1), m), f) * w];
+  }
+  // Run + Roxzone spread: each part's spread weighted by its share of the pair's median time, taken
+  // as independent. Roxzone goes in without its venue widening: a venue shifting time between
+  // running and Roxzone no longer moves the pair.
+  function runRoxSpread(catKey, T, med) {
+    const sr = spreadAt(catKey, 'run', T), sz = spreadAt(catKey, 'rox', T, true);
+    const wr = med.run / (med.run + med.rox), wz = 1 - wr;
+    return [0, 1].map(j => Math.max(Math.hypot(wr * sr[j], wz * sz[j]), SD_FLOOR.run));
   }
   // Closed profiles sit about delta minutes slow of the true per-segment medians.
   function deltaAt(cat, T) { return cat.delta ? interp(cat.delta, T / 60) * 60 : 0; }
@@ -304,17 +318,23 @@
     const M = expectedBlocks(catKey, Tm), profM = runProfileAt(catKey, Tm);
     const actual = { run: run28, rox }, exp = { run: E.run * share28, rox: E.rox }, med = { run: M.run * sum(profM.slice(1)) / 8, rox: M.rox };
     ST_IDS.forEach(k => { actual[k] = v[k]; exp[k] = E[k]; med[k] = M[k]; });
+    // Running (Runs 2-8) and Roxzone are compared as one pair (see META.runrox).
+    actual.runrox = actual.run + actual.rox; exp.runrox = exp.run + exp.rox; med.runrox = med.run + med.rox;
     // Beyond our race data (more than 5 min past either end of the table) typicals are extrapolated:
     // show the seconds, but don't rate the splits or quote shares of peers.
     const outside = Tp < cat._a[0].t - 300 || Tp > cat._a[cat._a.length - 1].t + 300;
 
+    const zOf = (key, sd) => { const r = Math.log(actual[key] / med[key]); return r / (r < 0 ? sd[0] : sd[1]); };
     const items = BLOCKS.map(key => {
       const a = actual[key], e = exp[key], d = a - e;
-      const r = Math.log(a / med[key]);
-      const sd = spreadAt(catKey, key, Tp);
-      const z = r / (r < 0 ? sd[0] : sd[1]);
+      const z = zOf(key, key === 'runrox' ? runRoxSpread(catKey, Tp, med) : spreadAt(catKey, key, Tp));
       return { key, name: META[key].name, label: labelOf(key), spec: META[key].spec, actual: a, exp: e, d, z, rating: outside ? NOT_RATED : rate(z), fasterShare: phi(z), noShare: outside };
     });
+    // The pair's two halves, shown for context only (never rated on their own).
+    const parts = {
+      run: { d: actual.run - exp.run, z: zOf('run', spreadAt(catKey, 'run', Tp)) },
+      rox: { d: actual.rox - exp.rox, z: zOf('rox', spreadAt(catKey, 'rox', Tp)) },
+    };
     // Time-savers: your biggest gaps in seconds (10 s or more), the way repeat racers' next-race
     // gains are best predicted. Each one also says where it sits among your peers.
     const leaks = items.filter(i => i.d >= 10).sort((a, b) => b.d - a.d);
@@ -333,7 +353,7 @@
     const pct = pctFaster(catKey, official);
     const res = {
       catKey, cat, v, official, T, Tp, rox, roxInferred, penalty, runTotal, run28, stTotal, E, exp,
-      items, leaks, onTable, projected: official - penalty - onTable, runs, runRows, avg: runTotal / 8, avg28, expAvg28, fade, typFade, prof,
+      items, parts, leaks, onTable, projected: official - penalty - onTable, runs, runRows, avg: runTotal / 8, avg28, expAvg28, fade, typFade, prof,
       run1Gap: runs[0] - expRuns[0], pct, conf: outside ? 'x' : confidenceAt(catKey, Tp), outside,
     };
     // Goals are set from your clean time: with a penalty, from what your splits add up to.
@@ -370,25 +390,27 @@
 
   // Personal targets for a goal: a segment where you are already faster than goal pace keeps
   // your time; the rest are set to lambda x the goal-time typical split, with lambda chosen so
-  // the targets add up exactly. Running here is all 8 km. Three things are carried as offsets, not
-  // as time to cut: a penalty (its own row), a few seconds of timing rounding, and a venue's long
-  // or short first lap (the plan assumes the same start lap next time).
+  // the targets add up exactly. Run + Roxzone here is all 8 km plus every transition. Three things
+  // are carried as offsets, not as time to cut: a penalty (its own row), a few seconds of timing
+  // rounding, and a venue's long or short first lap (the plan assumes the same start lap next time).
+  const withRunRox = o => Object.assign(o, { runrox: o.run + o.rox });
   function planGoal(res, goal) {
     if (!(goal > 0) || goal >= res.official) return null;
     const pen = res.penalty, r1 = res.run1Gap;
     const base0 = res.T - r1;                                   // your splits with a typical first lap
     const gSum = goal + (res.T - res.official) + pen - r1;      // what those must add up to
-    const act = { run: res.runTotal - r1, rox: res.rox };
+    const act = { runrox: res.runTotal - r1 + res.rox };
     ST_IDS.forEach(k => { act[k] = res.v[k]; });
+    const runRox = res.runTotal + res.rox;                      // what you actually ran, transitions included
     const base = { goal, need: res.official - goal, penalty: pen, splitsSum: res.T, run1: r1, rows: [] };
     if (gSum >= base0 - 0.5) {
       // Your splits already add up to the goal: the penalty was the difference.
       base.splitsOk = true;
-      const EG0 = expectedBlocks(res.catKey, goal);
-      base.rows = BLOCKS.map(k => ({ key: k, name: META[k].name, actual: k === 'run' ? res.runTotal : act[k], target: k === 'run' ? res.runTotal : act[k], typicalAtGoal: EG0[k], cut: 0, keep: true }));
+      const EG0 = withRunRox(expectedBlocks(res.catKey, goal));
+      base.rows = BLOCKS.map(k => ({ key: k, name: META[k].name, actual: k === 'runrox' ? runRox : act[k], target: k === 'runrox' ? runRox : act[k], typicalAtGoal: EG0[k], cut: 0, keep: true }));
       return base;
     }
-    const EG = expectedBlocks(res.catKey, gSum);
+    const EG = withRunRox(expectedBlocks(res.catKey, gSum));
     const total = lam => sum(BLOCKS.map(k => Math.min(act[k], lam * EG[k])));
     // At hi every segment keeps its own time (total = T), so the answer is always bracketed.
     let lo = 0, hi = Math.max(5, ...BLOCKS.map(k => act[k] / EG[k])) + 0.01;
@@ -396,8 +418,8 @@
     const lam = (lo + hi) / 2;
     base.rows = BLOCKS.map(k => {
       const cut = act[k] - Math.min(act[k], lam * EG[k]);
-      const shown = k === 'run' ? res.runTotal : act[k];        // what you actually ran
-      return { key: k, name: META[k].name, actual: shown, target: shown - cut, typicalAtGoal: EG[k] + (k === 'run' ? r1 : 0), cut, keep: cut < 0.5 };
+      const shown = k === 'runrox' ? runRox : act[k];
+      return { key: k, name: META[k].name, actual: shown, target: shown - cut, typicalAtGoal: EG[k] + (k === 'runrox' ? r1 : 0), cut, keep: cut < 0.5 };
     }).sort((a, b) => b.cut - a.cut);
     return base;
   }
@@ -588,12 +610,15 @@
   // ───────────────────────── Import: paste, screenshots, example ─────────────────────────
   const LABEL_DEFS = [
     ['avg', /\b(?:avg|average)\.?\s*(?:run|pace|lap)\b/gi],
-    // Run 1-8. The reader often turns the number into a look-alike letter (Run 5 → "Runs",
-    // Run 8 → "Rung"); a letter only counts as a number when a run-length time (under 20 min)
-    // follows it on the same line, so a "Runs 49:39" total is never taken for Run 5.
-    ['run', /\bru[nm]{1,2}(?:ing)?\s*#?\s*(?:([1-8lI|])(?![\d:])|([sSzZbBgG&])(?=\s+1?\d[:.]\d{2}(?![\d:])))/gi],
+    // Run 1-8. The reader often turns the number into a look-alike character (Run 5 → "Runs" or
+    // "Run§", Run 7 → "Run?", Run 8 → "Rung"). Any such character only counts when a run-length
+    // time (under 20 min) follows it on the same line, so a "Runs 49:39" total is never taken for
+    // a run; characters that aren't a known look-alike are numbered from the runs' order (numberRuns).
+    // A digit may be followed by a colon ("Run 1: 4:52") but not by a time ("Run 1:04:52"); l/I/|
+    // count only on their own ("Runl", not "Run Lap").
+    ['run', /\bru[nm]{1,2}(?:ing)?\s*#?\s*(?:([1-8])(?!\d|:\d)|([lI|])(?![\w:])|([^\s\d:])(?=\s+(?:0?0[:.])?[01]?\d[:.][0-5]\d(?![\d:])))/gi],
     ['runtotal', /\brun(?:ning)?\s*total\b|\btotal\s*run(?:ning)?\b|\brunning\b(?!\s*#?\s*[1-8lI|](?![\d:]))/gi],
-    ['functional', /\bfunctional\b|\bwork\s*total\b|\bstations?\s*total\b|\btotal\s*work\b/gi],
+    ['functional', /\bfunctional\b|\bwork\s*total\b|\bstations?(?:\s*total)?\b|\btotal\s*work\b/gi],
     ['ski', /\bski\s*-?\s*erg\b|\bski\b/gi],
     ['push', /\bsled\s*-?\s*pu[s5]h\b|\bpu[s5]h\b/gi],
     ['pull', /\bsled\s*-?\s*pu[l1I|]{2}\b|\bpu[l1I|]{2}\b/gi],
@@ -614,16 +639,25 @@
       /\d/.test(tok) ? pre + tok.replace(/[Oo]/g, '0').replace(/[Il|]/g, '1').replace(/[Ss]/g, '5').replace(/B/g, '8').replace(/[Zz]/g, '2') : all);
   }
   // Look-alike characters the reader puts in place of a run number.
-  const RUN_LOOKALIKE = { l: '1', L: '1', I: '1', i: '1', '|': '1', z: '2', Z: '2', s: '5', S: '5', b: '6', G: '6', B: '8', g: '8', '&': '8' };
+  const RUN_LOOKALIKE = { l: '1', L: '1', I: '1', i: '1', '|': '1', z: '2', Z: '2', s: '5', S: '5', '§': '5', $: '5', b: '6', G: '6', T: '7', '/': '7', B: '8', g: '8', '&': '8' };
+  // These also stand in for other digits (§/$ for 3 or 8, / for 1), so they only count where the
+  // runs' order alone decides the number.
+  const WEAK_LOOKALIKE = new Set(['§', '$', 'T', '/']);
   function findLabels(line) {
     const hits = [];
     LABEL_DEFS.forEach(([id, re]) => {
       re.lastIndex = 0;
       let m;
       while ((m = re.exec(line))) {
-        let key = id;
-        if (id === 'run') { const c = m[1] || m[2]; key = 'run' + (/[1-8]/.test(c) ? c : RUN_LOOKALIKE[c]); }
-        hits.push({ key, idx: m.index, end: m.index + m[0].length, len: m[0].length });
+        let key = id, run, soft, weak;
+        if (id === 'run') {
+          const c = m[1] || m[2] || m[3];
+          soft = !/[1-8]/.test(c);                                   // a look-alike is only a guess
+          weak = soft && WEAK_LOOKALIKE.has(c);
+          run = !soft ? +c : RUN_LOOKALIKE[c] ? +RUN_LOOKALIKE[c] : null;   // null: number unreadable
+          key = run ? 'run' + run : 'run?';
+        }
+        hits.push({ key, run, soft, weak, idx: m.index, end: m.index + m[0].length, len: m[0].length });
         if (m[0].length === 0) re.lastIndex++;
       }
     });
@@ -643,37 +677,102 @@
     }
     return out;
   }
+  // Run numbers the reader misread or couldn't read ("Run§", "Run?", or a 5 read as a 6): every
+  // results screen lists the runs in order, so a run between Run 4 and Run 6 is Run 5.
+  //  - All 8 runs on one screenshot with most numbers already in order: the order decides them all.
+  //  - Otherwise the clearly read digits split the list into stretches (before the first, between
+  //    two, after the last). A stretch whose length matches the numbers left for it is numbered
+  //    in order. When a run is missing nearby, only a look-alike guess that the order leaves room
+  //    for is kept; anything else stays empty, never in the wrong field.
+  //  - Clear digits that don't rise (runs listed column by column: 1, 5, 2, 6 …) renumber nothing.
+  function numberRuns(found) {
+    // An exact repeat of a clearly read run (same number, same time) is a summary or repeated row.
+    const seen = new Set();
+    const runs = found.filter(r => {
+      if (r.soft || r.run == null) return true;
+      const k = r.run + ':' + r.sec;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    const n = runs.length;
+    if (!n) return;
+    const g = runs.map(r => r.run);
+    const known = g.map((v, i) => [i, v]).filter(p => p[1] != null);
+    const inOrder = known.filter(p => p[1] === p[0] + 1).length;
+    let fences = runs.map((r, i) => [i, r.run]).filter((p, i) => p[1] != null && !runs[i].soft);   // [position, number]
+    const rising = fences.every((p, k) => !k || p[1] > fences[k - 1][1]);
+    if (n === 8 && inOrder >= 4 && inOrder > known.length - inOrder) g.forEach((v, i) => { g[i] = i + 1; });
+    else if (!fences.length || !rising) runs.forEach((r, i) => { if (r.weak) g[i] = null; });
+    else {
+      // A stretch holding more runs than there are numbers left for it means a clear digit was
+      // misread (a 6 read as a 5): stop trusting the digits either side of it and look again.
+      for (;;) {
+        const b = [[-1, 0]].concat(fences, [[n, 9]]);
+        const k = b.findIndex((f, j) => j < b.length - 1 && b[j + 1][0] - f[0] > b[j + 1][1] - f[1]);
+        if (k < 0) break;
+        fences = fences.filter(f => f !== b[k] && f !== b[k + 1]);
+      }
+      const bounds = [[-1, 0]].concat(fences, [[n, 9]]);
+      for (let k = 0; k < bounds.length - 1; k++) {
+        const [pa, lo] = bounds[k], [pb, hi] = bounds[k + 1];
+        const idx = [];
+        for (let i = pa + 1; i < pb; i++) idx.push(i);
+        if (!idx.length) continue;
+        const left = hi - lo - 1;                            // run numbers between the fences
+        if (idx.length === left) { idx.forEach((i, j) => { g[i] = lo + 1 + j; }); continue; }
+        let last = lo;
+        idx.forEach((i, j) => {
+          const v = g[i];
+          // A weak look-alike (§ $ T /) only counts where the order alone decides (above).
+          const fits = v != null && !runs[i].weak && v > last && v - lo >= j + 1 && hi - v >= idx.length - j;
+          g[i] = fits ? v : null;
+          if (fits) last = v;
+        });
+      }
+    }
+    runs.forEach((r, i) => { r.key = g[i] ? 'run' + g[i] : 'run?'; });
+  }
+  // Screenshots are read one at a time and joined with a form feed; runs are numbered per screenshot.
   function parseSplitsText(text) {
-    const lines = String(text || '').split(/\r?\n/).map(normLine).filter(l => l.trim());
     const got = {}, conflicts = [];
     const put = (key, sec) => {
       if (IGNORE[key] || !FIELD[key]) return;
       if (got[key] == null) got[key] = sec;
       else if (Math.abs(got[key] - sec) > 1) conflicts.push(key);
     };
-    for (let i = 0; i < lines.length; i++) {
-      const labels = findLabels(lines[i]);
-      if (!labels.length) continue;
-      const times = findTimes(lines[i]);
-      if (times.length) {
-        labels.forEach((lab, k) => {
-          const next = labels[k + 1] ? labels[k + 1].idx : Infinity;
-          const t = times.find(x => x.idx >= lab.end && x.idx < next);
-          if (t) put(lab.key, t.sec);
-        });
-      } else {
-        // Label row with the values on the next line (summary tiles, one-per-line layouts).
-        for (let j = i + 1; j < Math.min(lines.length, i + 3); j++) {
-          if (findLabels(lines[j]).length) break;
-          const t2 = findTimes(lines[j]);
-          if (t2.length) {
-            if (labels.length === 1) put(labels[0].key, t2[0].sec);
-            else labels.forEach((lab, k) => { if (t2[k]) put(lab.key, t2[k].sec); });
-            break;
+    String(text || '').split('\f').forEach(segment => {
+      const lines = segment.split(/\r?\n/).map(normLine).filter(l => l.trim());
+      const found = [];                     // every label that got a time, in reading order
+      const take = (lab, sec) => found.push({ key: lab.key, run: lab.run, soft: lab.soft, weak: lab.weak, sec });
+      for (let i = 0; i < lines.length; i++) {
+        const labels = findLabels(lines[i]);
+        if (!labels.length) continue;
+        const times = findTimes(lines[i]);
+        if (times.length) {
+          labels.forEach((lab, k) => {
+            const next = labels[k + 1] ? labels[k + 1].idx : Infinity;
+            const t = times.find(x => x.idx >= lab.end && x.idx < next);
+            if (t) take(lab, t.sec);
+          });
+        } else {
+          // Label row with the values on the next line (summary tiles, one-per-line layouts).
+          for (let j = i + 1; j < Math.min(lines.length, i + 3); j++) {
+            if (findLabels(lines[j]).length) break;
+            const t2 = findTimes(lines[j]);
+            if (t2.length) {
+              // One label takes the first value. Several take theirs in order only when the counts
+              // match; otherwise there's no telling which value is whose, so the row is skipped.
+              if (labels.length === 1) take(labels[0], t2[0].sec);
+              else if (t2.length === labels.length) labels.forEach((lab, k) => take(lab, t2[k].sec));
+              break;
+            }
           }
         }
       }
-    }
+      numberRuns(found.filter(f => f.run !== undefined && f.sec < 1200));
+      found.forEach(f => put(f.key, f.sec));
+    });
     return { got, conflicts };
   }
 
@@ -787,7 +886,7 @@
       texts.push(data.text);
     }
     await worker.terminate();
-    return texts.join('\n');
+    return texts.join('\n\f\n');            // the form feed keeps each screenshot's runs apart
   }
   async function readScreenshots(files) {
     const list = Array.from(files || []).filter(f => /^image\//.test(f.type) || /\.(png|jpe?g|webp|heic|heif)$/i.test(f.name));
@@ -998,33 +1097,20 @@
   // The finish time your peers are matched on: your official time unless your splits (with a
   // typical first lap) differ from it by more than a minute.
   function peerTime(res) { return Math.abs(res.Tp - res.official) <= 60 ? res.official : res.Tp; }
-  // Doubles at 95+ min: the run/Roxzone split in the data is modelled, so read the two together.
-  // Running is drawn per km and Roxzone in full, so their combined gap is given in words.
-  const mixedRunRox = res => res.cat.group === 'doubles' && res.Tp >= 5700;
-  function togetherText(res) {
-    const run = res.items.find(i => i.key === 'run'), rox = res.items.find(i => i.key === 'rox');
-    return 'combined they\'re ' + deltaWords(run.d + rox.d) + ' (running ' + fmtDelta(run.d) + ' over Runs 2–8, Roxzone ' + fmtDelta(rox.d) + ')';
-  }
-  function mixedNote(res, key) {
-    return mixedRunRox(res) && (key === 'run' || key === 'rox')
-      ? ' At this level, running and transitions are hard to separate in the data, so read Running and Roxzone together: ' + togetherText(res) + '.' : '';
-  }
-
   // The report is two panels: strengths & weak spots first, then the path to a goal.
   function renderReport(res) {
     tipSeq = 0;
     Object.keys(TIPS).forEach(k => delete TIPS[k]);
     const cat = res.cat;
-    const roxItem = res.items.find(i => i.key === 'rox');
-    const mixed = mixedRunRox(res);
     const notes = [];
     if (res.outside) notes.push('Your time is outside the range our race data covers, so the typical splits are extrapolated and your splits aren\'t rated. Treat the seconds as a rough guide.');
     else if (res.pct < 0.5 || res.pct > 98) notes.push('Few ' + cat.unit + ' finish in this time, so treat the numbers as a guide.');
-    else if (res.conf === 'l' && !mixed) notes.push('Our race data is thinner at this finish time, so treat the numbers as a guide.');
-    if (mixed) notes.push('At this finish time the doubles data can\'t cleanly separate running from Roxzone, so read those two together: ' + togetherText(res) + '.' + (res.conf === 'l' && !res.outside ? ' Treat the numbers as a guide.' : ''));
+    else if (res.conf === 'l') notes.push('Our race data is thinner at this finish time, so treat the numbers as a guide.');
     if (res.penalty) notes.push('Your official time is ' + fmt(res.penalty) + ' longer than your splits add up to, which usually means a penalty; the analysis uses your splits.');
     if (Math.abs(res.run1Gap) > 30) notes.push('Your Run 1 was ' + fmt(Math.abs(res.run1Gap)) + (res.run1Gap > 0 ? ' slower' : ' faster') + ' than a typical first lap (start laps vary by venue), so it isn\'t compared and your peers are matched on your other splits.');
-    if (res.roxInferred) notes.push('Your Roxzone was worked out from your overall time, so any penalty is counted as Roxzone.' + (roxItem.z >= 0.67 ? ' If you had one, enter your Roxzone time from your results.' : ''));
+    // A slow inferred Roxzone, or a Run + Roxzone rated slow, may be hiding a penalty.
+    const rrz = res.items.find(i => i.key === 'runrox').z;
+    if (res.roxInferred) notes.push('Your Roxzone was worked out from your overall time, so any penalty is counted in Run + Roxzone.' + (rrz >= 0.67 || res.parts.rox.z >= 0.67 ? ' If you had one, enter your Roxzone time from your results.' : ''));
     const pt = peerTime(res);
     // When your peers' finish time isn't your official time, say why right where both are shown.
     const why = [];
@@ -1038,7 +1124,7 @@
     // Strengths & weak spots (diverging bars)
     h += '<div class="panel keep"><div class="panel-h"><h3>Strengths &amp; weak spots</h3></div>' +
       '<div class="r-tags"><span class="y">' + esc(cat.label) + '</span><span>' + esc(fmt(res.official)) + ' finish</span></div>' +
-      '<p class="panel-sub">Compared with <b>' + esc(cat.who) + ' who finish in about ' + esc(fmt(pt)) + '</b>' + (why.length ? ' (your time ' + why.join(' and ') + ')' : '') + '. Each bar is how far your split is from the typical split at that time, and the label under each name says where you sit among them. Running is shown per kilometre: your average on Runs 2–8 (Run 1\'s length varies by venue). Tap or hover over a bar to see your time, the typical time and where you rank.</p>' +
+      '<p class="panel-sub">Compared with <b>' + esc(cat.who) + ' who finish in about ' + esc(fmt(pt)) + '</b>' + (why.length ? ' (your time ' + why.join(' and ') + ')' : '') + '. Each bar is how far your split is from the typical split at that time, and the label under each name says where you sit among them. Running and Roxzone are judged together as <b>Run + Roxzone</b>, because venues split time between them differently; that bar is per km of Runs 2–8, transitions included (Run 1\'s length varies by venue). Tap or hover over a bar to see your time, the typical time and where you rank.</p>' +
       '<div class="panel-b"><div class="dv-top"><div class="dv-legend"><span><i class="sw-gain"></i>Slower than typical</span><span><i class="sw-strong"></i>Faster than typical</span></div>' +
       '<div class="seg-toggle" role="group" aria-label="Sort the bars"><button type="button" data-sort="gap" aria-pressed="true">Biggest gap</button><button type="button" data-sort="race" aria-pressed="false">Race order</button></div></div>' +
       '<div class="dv" id="dvChart"></div>' +
@@ -1060,38 +1146,39 @@
     bindReport(res);
   }
 
-  // Running is drawn per km (its Runs 2-8 gap ÷ 7), so its bar compares one kilometre with one
-  // station; its name block still gives the whole gap. Ratings don't change: they compare ratios.
-  // Each row's numbers are rounded once, so You − Typical = Difference wherever they're shown.
-  const shownD = i => (i.key === 'run' ? i.d / 7 : i.d);
+  // Run + Roxzone is drawn per km of Runs 2-8 (its gap ÷ 7, transitions included), so its bar
+  // compares one km with one station; its name block still gives the whole gap. Ratings don't
+  // change with that: they compare ratios. Each row's numbers are rounded once, so
+  // You − Typical = Difference wherever they're shown.
+  const shownD = i => (i.key === 'runrox' ? i.d / 7 : i.d);
   function renderDiverging(res, mode) {
     const items = res.items.slice();
     if (mode === 'gap') items.sort((a, b) => shownD(b) - shownD(a));
     const maxAbs = Math.max(30, ...items.map(i => Math.abs(shownD(i))));
     $('#dvChart').innerHTML = items.map(i => {
-      const isRun = i.key === 'run', d = shownD(i), dR = Math.round(d);
+      const isRun = i.key === 'runrox', d = shownD(i), dR = Math.round(d);
       const w = Math.min(50, (Math.abs(d) / maxAbs) * 50);
       const cls = d >= 0 ? 'gain' : 'strong';
-      const you = isRun ? Math.round(res.avg28) : i.actual, typ = you - dR, per = isRun ? '/km' : '';
-      const note = i.rating.text + '. ' + peerLine(i, res.cat) +
-        (isRun ? ' Run 1 isn\'t compared because its length depends on the venue\'s start.' + (venueRunNote(res) ? ' ' + venueRunNote(res) : '') : '') + mixedNote(res, i.key);
+      const you = isRun ? Math.round(i.actual / 7) : i.actual, typ = you - dR, per = isRun ? '/km' : '';
+      const note = i.rating.text + '. ' + peerLine(i, res.cat) + (isRun ? ' ' + runRoxNote(res, Math.round(i.d)) : '');
       const rows = [['You', fmt(you) + per], ['Typical', fmt(typ) + per], ['Difference', fmtDelta(dR) + per]];
-      if (isRun) rows.push(['Over Runs 2–8', fmtDelta(i.d)]);
-      const tip = tipAttr(isRun ? 'Running · average km, Runs 2–8' : i.label, rows, note);
+      if (isRun) rows.push(['In all', fmtDelta(i.d)]);
+      const tip = tipAttr(isRun ? 'Run + Roxzone · per km of Runs 2–8' : i.label, rows, note);
       const aria = (isRun
-        ? 'Running, average kilometre on Runs 2 to 8: you ' + fmt(you) + ' per km, typical ' + fmt(typ) + ' per km, ' + deltaWords(dR) + ' per km, ' + deltaWords(i.d) + ' over the 7 km'
+        ? 'Run plus Roxzone, per kilometre of Runs 2 to 8 with transitions: you ' + fmt(you) + ' per km, typical ' + fmt(typ) + ' per km, ' + deltaWords(dR) + ' per km, ' + deltaWords(i.d) + ' in all'
         : i.label + ': you ' + fmt(you) + ', typical ' + fmt(typ) + ', ' + deltaWords(dR)) + '. ' + note;
       return '<div class="dv-row" role="group" tabindex="0"' + tip + ' aria-label="' + esc(aria) + '">' +
         '<div class="dv-name"><b>' + nameHTML(i.key) + '</b><small>' + esc(i.rating.text) + '</small>' +
-        (isRun ? '<small class="dv-tot">' + esc(fmtDelta(i.d)) + ' over 7 km</small>' : '') + '</div>' +
+        (isRun ? '<small class="dv-tot">' + esc(fmtDelta(i.d)) + ' in all</small>' : '') + '</div>' +
         '<div class="dv-track"><span class="dv-bar ' + cls + '" style="width:' + w.toFixed(2) + '%"></span></div>' +
         '<div class="dv-val">' + fmtDelta(dR) + (isRun ? '<small>per km</small>' : '') + '</div></div>';
     }).join('');
   }
-  // Many US venues log a bit more of the race as running, so a small running gap can be the venue.
-  function venueRunNote(res) {
-    const run = res.items.find(i => i.key === 'run');
-    return run.d > 0 && run.d < 0.08 * run.exp ? 'Many venues, including most in the US, log a bit more of the race as running (often a minute or two), so part of a running gap this size can be the venue.' : '';
+  // Why running and Roxzone share one bar, with the two halves for context. The halves are
+  // rounded from the row's own total, so they add up to the "In all" figure shown with them.
+  function runRoxNote(res, total) {
+    const runS = Math.round(res.parts.run.d), roxS = total - runS;
+    return 'Running and Roxzone are judged together because venues split the time between them differently (where the timing mats sit, how the laps run). On their own: running ' + fmtDelta(runS) + ' on Runs 2–8, Roxzone ' + fmtDelta(roxS) + '. Run 1 isn\'t compared because its length depends on the venue\'s start.';
   }
 
   function goalPanelHTML(res) {
@@ -1129,7 +1216,7 @@
         return;
       }
       const keep = r.cut < 0.5;
-      const tip = tipAttr(r.key === 'run' ? 'Running · all 8 km' : r.name, [['You', fmt(r.actual)], ['Target', fmt(r.target)], ['Typical at ' + fmt(plan.goal), fmt(r.typicalAtGoal)]], keep ? 'Already at goal pace: keep it there.' : null);
+      const tip = tipAttr(r.key === 'runrox' ? 'Run + Roxzone · all 8 km and transitions' : r.name, [['You', fmt(r.actual)], ['Target', fmt(r.target)], ['Typical at ' + fmt(plan.goal), fmt(r.typicalAtGoal)]], keep ? 'Already at goal pace: keep it there.' : null);
       h += '<tr class="' + (keep ? 'keep' : '') + '" tabindex="0"' + tip + '><td>' + nameHTML(r.key, true) + '</td><td class="r">' + fmt(r.actual) + '</td><td class="r">' + fmt(r.target) + '</td><td class="cutcell">' +
         (keep ? '<span style="color:var(--strong-text)">✓ Already at goal pace</span>' : cutCell(r.cut)) + '</td></tr>';
     });
@@ -1156,12 +1243,12 @@
     return h + '</div>';
   }
 
-  // Short names for narrow screens. In the strengths chart running is the average km on Runs 2-8;
-  // in the goal plan it's all 8 km.
-  const SHORT = { ski: 'SkiErg', push: 'Sled Push', pull: 'Sled Pull', bbj: 'Burpee BJ', row: 'Row', farm: 'Farmers', lunge: 'Lunges', wb: 'Wall Balls', rox: 'Roxzone' };
+  // Short names for narrow screens. Run + Roxzone is per km of Runs 2-8 in the strengths chart and
+  // all 8 km plus every transition in the goal plan.
+  const SHORT = { runrox: 'Run + Rox', ski: 'SkiErg', push: 'Sled Push', pull: 'Sled Pull', bbj: 'Burpee BJ', row: 'Row', farm: 'Farmers', lunge: 'Lunges', wb: 'Wall Balls', rox: 'Roxzone' };
   function nameHTML(key, plan) {
-    const long = key === 'run' ? (plan ? 'Running (all 8 km)' : 'Running (avg per km)') : META[key].name;
-    const short = key === 'run' ? (plan ? 'Running 8 km' : 'Run (avg/km)') : (SHORT[key] || long);
+    const long = key === 'runrox' && plan ? 'Run + Roxzone (all 8 km)' : META[key].name;
+    const short = SHORT[key] || long;
     return long === short ? esc(long) : '<span class="nm-l">' + esc(long) + '</span><span class="nm-s">' + esc(short) + '</span>';
   }
 
